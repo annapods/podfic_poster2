@@ -13,7 +13,7 @@ Cf doc/, TODO.md and the github issues.
 ## Technologies used
 
 - Gtk for the GUI
-- SQL for the database
+- SQLite for the database
 - Python for everything else
 
 ## Current process and automation levels
