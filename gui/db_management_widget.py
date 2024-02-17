@@ -1,7 +1,7 @@
 from typing import Any, List, Optional
 from gui.base_graphics import PaddedFrame, PaddedGrid, generate_table, init_datastore
 from gi.repository import Gtk
-from db.db_handler import SQLiteHandlerForGtk
+from db.db_handler import SQLiteHandler
 from gi.overrides.Gtk import TreeSelection, Button
 
 from gui.db_record_widget import RecordManager
@@ -158,7 +158,7 @@ class DBManager(PaddedGrid):
        
     def _reload_db(self) -> None:
         """ """
-        self.db_handler = SQLiteHandlerForGtk(self.db_path)
+        self.db_handler = SQLiteHandler(self.db_path)
         self._record_grid.db_handler = self.db_handler
         self.load_values(None, None)
     

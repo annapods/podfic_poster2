@@ -1,3 +1,7 @@
+""" Database objects and auxiliary functions
+A DataModel object, instanciated from an excel datamodel file, contains Table objects
+which contain Field objects
+Records are not saved in the DataModel or Table objects but have a link back to their parent Table """
 
 from typing import Any, Dict, List, Optional, Union
 from numpy import nan
@@ -21,20 +25,20 @@ def clean_df(df:DataFrame) -> DataFrame:
 
 
 class BaseDataObject(BaseObject):
-    """ Data or data model base object class """
-    def __init__(self, ID:str, verbose:Optional[bool]=True) -> None:
+    """ Data or data model base object class to be inherited from """
+    def __init__(self, display_name:str, verbose:Optional[bool]=True) -> None:
         super().__init__(verbose)
-        self.ID = ID
+        self.display_name = display_name
 
     def __str__(self) -> str:
-        return self.ID
+        return self.display_name.replace("_"," ")
     
     def __repr__(self) -> str:
-        return f"{type(self).__name__.lower()}:{self.ID}"
+        return f"{type(self).__name__.lower()}: {self.display_name.replace('_',' ')}"
 
 
 class Field(BaseDataObject):
-    """ Field in data model """
+    """ Field in a Table """
     def __init__(
             self, parent_table:BaseDataObject, field_name:str, type:str,
             foreign_key_table:Optional[BaseDataObject]=None,
@@ -43,8 +47,8 @@ class Field(BaseDataObject):
             display_order:Optional[int]=1000000, verbose:Optional[bool]=True):
         """ NOTE parent_table and foreign_key_table are Table objects
         Order of declaration in the file doesn't allow for more specific type hinting """
-        ID = display_name_concat([parent_table.table_name, field_name])
-        super().__init__(ID, verbose)
+        display_name = display_name_concat([parent_table.table_name, field_name])
+        super().__init__(display_name, verbose)
         self.parent_table = parent_table
         self.field_name = field_name
         self.type = type
@@ -55,9 +59,15 @@ class Field(BaseDataObject):
         self.display_in_table = display_in_table
         self.display_order = display_order
 
+    def __str__(self) -> str:
+        return self.display_name.replace("_"," ")
+    
+    def __repr__(self) -> str:
+        return f"Field in {self.parent_table}: {self}"
+
 
 class Table(BaseDataObject):
-    """ Table in data model """
+    """ Table in a DataModel, contains Fields """
     def __init__(
             self, table_name:str, fields:Optional[List[Field]] = [],
             sort_rows_by:Optional[Field]=None, verbose:Optional[bool]=True):
@@ -83,17 +93,23 @@ class Table(BaseDataObject):
 
 class Record(BaseDataObject):
     """ Record in a table
-    Records are not loaded in the DataModel """
+    Records are not loaded in the DataModel or the Table
+    ID and display_name can be empty if the record doesn't exist in the database yet """
     def __init__(
-            self, ID:str, parent_table:Table, values:Dict[Field, Any],
-            verbose:Optional[bool]=True) -> None:
-        super().__init__(ID, verbose)
-        self.parent_table = parent_table
+            self, parent_table:Table,
+            values:Dict[Field, Any], verbose:Optional[bool]=True) -> None:
+        super().__init__(
+            values.pop(parent_table.get_field("display_name"), "no display name yet"), verbose)
+        self.ID = values.pop(parent_table.get_field("ID"), -1)
         self.values = values
+        self.parent_table = parent_table
+    
+    def __repr__(self) -> str:
+        return f"{self.parent_table}: {self}"
 
 
 class DataModel(BaseObject):
-    """ Data model """
+    """ Data model, contains Tables, which contain Fields """
     def __init__(self, spreadsheet_path:str="db/datamodel.ods", verbose:Optional[bool]=True):
         super().__init__(verbose)
         self.spreadsheet_path = spreadsheet_path
@@ -120,7 +136,7 @@ class DataModel(BaseObject):
         
         # Load fields in tables in model
         for table in self.tables:
-            table_field_df = data_field_df[data_field_df["table_name"] == table.ID]
+            table_field_df = data_field_df[data_field_df["table_name"] == table.table_name]
             table.fields = [
                 Field(table, *info_list) for info_list \
                 in zip(*[table_field_df[column] for column in field_info])]

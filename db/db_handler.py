@@ -1,39 +1,79 @@
-from sqlite3 import connect
-from typing import Any, Optional, List, Tuple, Union
-from pandas import ExcelWriter, Series, ExcelFile, read_sql_query
+""" Database handlers """
+
+from argparse import ArgumentError
+from sqlite3 import OperationalError, connect
+from typing import Any, Dict, Literal, Optional, List, Tuple, Union
+from pandas import ExcelWriter, Series, ExcelFile, read_sql_query, DataFrame
 from numpy import nan
 from os import remove
 from os.path import exists
+from db.db_objects import DataModel, Field, Record, Table, clean_df
 from src.base_object import BaseObject
 
 
-class DBHanler(BaseObject):
-    """ Virtual class for Database handlers """
+class Singleton(type): 
+    # Inherit from "type" in order to gain access to method __call__
+    def __init__(self, *args, **kwargs):
+        self.__instance = None # Create a variable to store the object reference
+        super().__init__(*args, **kwargs)
 
-    def __init__(self, database_path:str, verbose:bool=True):
-        self.database_path = database_path
+    def __call__(self, *args, **kwargs):
+        if self.__instance is None:
+            # if the object has not already been created
+            self.__instance = super().__call__(*args, **kwargs) # Call the __init__ method of the subclass (Spam) and save the reference
+            return self.__instance
+        else:
+            # if object (Spam) reference already exists; return it
+            return self.__instance
+
+
+class DataHandler(BaseObject, metaclass=Singleton):
+    """ Virtual class for Database handlers
+    Database handlers load in memory the model of the database, but they don't load the data itself
+    They can however read, create, modify and delete the records in the database """
+
+    def __init__(self, database_path:str, datamodel_path:str="db/datamodel.ods", verbose:bool=True):
         super().__init__(verbose)
+        self.database_path = database_path
+        self.data_model = DataModel(datamodel_path)
     
-    def fetch_query(self):
+    def init_db_from_model(self) -> None:
+        """ Create/overwrite database based on model """
         raise NotImplementedError
     
-    def run_query(self):
+    def load_db_from_spreadsheet(self) -> None:
+        """ Overwrite database data with spreadsheet data """
         raise NotImplementedError
     
-    def init_db_from_spreadsheet(self, spreadsheet_path:str="data_model_test.ods") -> None:
-        """ Create/overwrite database based on spreadsheet """
+    def export_db_to_spreadsheet(self) -> None:
+        """ Create/overwrite spreadsheet data with database data """
+        raise NotImplementedError
+
+    def get_records(self) -> List[Record]:
+        """ Return records from database """
         raise NotImplementedError
     
-    def export_db_to_spreadsheet(self, spreadsheet_path:str="data_model_test.ods") -> None:
-        """ Create/overwrite spreadsheet based on database """
+    def add_record(self, record:Record) -> None:
+        """ Add (insert or fail) a new record in the database """
+        raise NotImplementedError
+    
+    def edit_record(self, record:Record) -> None:
+        """ Edit (update or fail) an existing record in the database """
+        raise NotImplementedError
+    
+    def delete_record(self, record:Record) -> None:
+        """ Delete a record in the database """
         raise NotImplementedError
 
 
-class SQLiteHandler(DBHanler):
+
+class SQLiteHandler(DataHandler):
     """ SQLite database handler """
-
-    def __init__(self, database_path:str="db/podfics.db", verbose:bool=True):
-        super().__init__(database_path, verbose)
+   
+    def __init__(
+            self, database_path:str="db/podfics.db", datamodel_path:str="db/datamodel.ods",
+            verbose:bool=True):
+        super().__init__(database_path, datamodel_path, verbose)
         self.con = connect(self.database_path)
         self.cur = self.con.cursor()
 
@@ -42,112 +82,59 @@ class SQLiteHandler(DBHanler):
         try: self.con.close()
         except AttributeError as e: pass
 
-
-    def fetch_query(self, query:str, parameters:List[Any]) -> Tuple[List[str], List[List[Any]]]:
-        """ Fetch results of the query, return headers and data """
+    def run_query(self, query:str, parameters:List[Any]) -> List[List[Any]]:
+        """ Fetch results of the query """
         try:
             res = self.cur.execute(query, parameters)
         except Exception as e:
-            print(query)
+            print("DEBUG query failed", query)
+            self._vprint("DEBUG headers", list(map(lambda attr : attr[0], self.cur.description)))
+            self._vprint("DEBUG data", res.fetchall())
             raise e
-        headers = list(map(lambda attr : attr[0], self.cur.description))
-        data = res.fetchall()
-        return headers, data
-
-    def run_query(self, query:Union[str, Tuple[str,List[Any]]]) -> None:
-        """ Run query """
-        res = self.cur.execute(query)
-
-    def _get_table_sort_by(self, table_name:str) -> str:
-        """ Return sort_rows_by field for the given table """
-        query = f'SELECT sort_rows_by FROM data_table WHERE table_name = "{table_name}"'
-        headers, data = self.fetch_query(query, [])
-        sort_by = data[0][0]
-        return sort_by
-
-
-    def get_table_contents_for_gui(
-            self, table_name:str,
-            field_names:Optional[List[str]]=[],
-            sort_by:Optional[str]=None,
-            where_condition:Optional[str]=None,
-            ) -> Tuple[List[str], List[type], List[List[Any]]]:
-        """ Get column names, column types, and data """
-
-        # Get data fields info for the given table
-        fields_info_query = f'''SELECT * FROM data_field WHERE table_name="{table_name}"'''
-        if field_names:
-            fields_info_query += f''' AND field_name IN ({", ".join("?"*len(field_names))})'''
-        fields_info_query += ''' AND display_in_table = TRUE ORDER BY display_order'''
-        field_names, field_info_lists = self.fetch_query(fields_info_query, field_names)
-        field_info_dicts = [
-            {column:value for column, value in zip(field_names, info)}
-            for info in field_info_lists]
-        
-        # Get column names
-        column_names = [field["field_name"] for field in field_info_dicts]
-        
-        # Get column types
-        type_mapping = {"TEXT": str, "INTEGER": int, "BOOLEAN": bool, "DATE":str}
-        column_types = [type_mapping[field["type"]] for field in field_info_dicts]
-
-        # Get sort order
-        if not sort_by: sort_by = self._get_table_sort_by(table_name)
-
-        # Get data
-        data_query = f'''SELECT {", ".join(column_names)} FROM {table_name}'''
-        if where_condition: data_query += f''' WHERE {where_condition}'''
-        data_query += f''' ORDER BY {sort_by}'''
-        _, data = self.fetch_query(data_query, [])
-
-        return column_names, column_types, data 
+        self.con.commit()
+        return res
     
+    def debug_schema(self, debug_table="archive_warning") -> None:
+        """ Print database schema and one table for debug purposes """
+        schema = self.run_query("""
+            WITH tables AS (SELECT name tableName, sql 
+            FROM sqlite_master WHERE type = 'table' AND tableName NOT LIKE 'sqlite_%')
+            SELECT fields.name, fields.type, tableName
+            FROM tables CROSS JOIN pragma_table_info(tables.tableName) fields""", []).fetchall()
+        print("DB schema:", schema)
+        try:
+            table_contents = self.run_query(f"SELECT * FROM {debug_table};", []).fetchall()
+            print(debug_table+":", table_contents)
+        except OperationalError as e:
+            print(debug_table+":", e)
+        print()
 
-    def init_db_from_spreadsheet(
-            self, spreadsheet_path:str="db/data_model.ods") -> None:
-        """ Create/overwrite database based on spreadsheet """
-
-        # Load model and data
-        excel_file = ExcelFile(spreadsheet_path)
-        data = {tab:excel_file.parse(tab) for tab in excel_file.sheet_names}
-
-        # Clean data
-        for tab in data:
-            data[tab].dropna(how="all", inplace=True)
-            data[tab].fillna(nan, inplace=True)
-            data[tab].replace([nan], [None], inplace=True)
-
-        # Generate sql for fields and tables
-
-        def sql_field(x:Series) -> str:
-            """ Generate sql code for one field.
-            To be used with DataFrame.apply on data_field. """
-            res = x["field_name"]+" "+x["type"]
-            res += " NOT NULL" if x["mandatory"] else ""
-            res += " DEFAULT "+str(x["default_value"]) if x["default_value"] else ""
-            res += " REFERENCES "+x["foreign_key_table"]+\
-                    "(display_name) ON UPDATE CASCADE ON DELETE SET DEFAULT" \
-                if x["foreign_key_table"] else ""
-            return res
-
-        def sql_table(x:Series) -> str:
-            """ Generate sql code for one table.
-            To be used with DataFrame.apply on data_table. """
-            res = "CREATE TABLE IF NOT EXISTS "+x["table_name"]+\
-                "(ID INTEGER PRIMARY KEY AUTOINCREMENT,\n"
-            res += "display_name STRING GENERATED ALWAYS AS ("
-            res += ' || " - " || '.join(data["data_field"][
-                    (data["data_field"]["table_name"]==x["table_name"]) & \
-                    (data["data_field"]["part_of_display_name"]==True)
-                ]["field_name"]) + "),\n"
-            res += ',\n'.join(data["data_field"][
-                    data["data_field"]["table_name"]==x["table_name"]
-                ]["sql"]) + ",\n"
-            res += "creation_date DATE DEFAULT (datetime(current_timestamp))" + ")"
-            return res
-
-        data["data_field"]["sql"] = data["data_field"].apply(sql_field, axis=1)
-        data["data_table"]["sql"] = data["data_table"].apply(sql_table, axis=1)
+    
+    def init_db_from_model(self) -> None:
+        """ Create/overwrite database based on model """
+        
+        def get_field_sql(field:Field) -> str:
+            sql = f"{field.field_name} {field.type}"
+            sql += " NOT NULL" if field.mandatory else ""
+            sql += f" DEFAULT {field.default_value}" if field.default_value else ""
+            sql += f" REFERENCES {field.foreign_key_table.display_name}(ID)" +\
+                " ON UPDATE CASCADE ON DELETE SET DEFAULT" \
+                if field.foreign_key_table else ""
+            return sql
+        
+        def get_table_sql(table:Table) -> str:
+            sql = f"CREATE TABLE IF NOT EXISTS {table.table_name}"
+            sql += "(ID INTEGER PRIMARY KEY AUTOINCREMENT,\n"
+            sql += "display_name STRING UNIQUE GENERATED ALWAYS AS ("
+            sql += ' || " - " || '.join([
+                    f.field_name for f in table.fields \
+                    if f.part_of_display_name])
+            sql += "),\n"
+            sql += ',\n'.join(
+                get_field_sql(field) for field in table.fields
+                if field.field_name not in ["ID", "display_name", "creation_date"]) + ",\n"
+            sql += "creation_date DATE DEFAULT (datetime(current_timestamp))" + ")"
+            return sql
 
         # Delete and recreate database
         remove(self.database_path)
@@ -155,37 +142,68 @@ class SQLiteHandler(DBHanler):
         self.cur = self.con.cursor()
 
         # Create tables
-        for table, command in zip(data["data_table"]["table_name"], data["data_table"]["sql"]):
-            self.cur.execute("DROP TABLE IF EXISTS "+table)
-            self.cur.execute(command)
+        for table in self.data_model.tables:
+            self.cur.execute("DROP TABLE IF EXISTS "+table.table_name)
+            self.cur.execute(get_table_sql(table))
         self.con.commit()
 
-        # Drop working columns
-        data["data_field"].drop("sql", axis=1, inplace=True)
-        data["data_table"].drop("sql", axis=1, inplace=True)
+    def export_db_model_to_spreadsheet(self, spreadsheet_path:str="db/database.ods") -> None:
+        """ Overwrite spreadsheet data model with database model """
+        schema = self.run_query("""
+            WITH tables AS (SELECT name tableName, sql 
+            FROM sqlite_master WHERE type = 'table' AND tableName NOT LIKE 'sqlite_%')
+            SELECT tableName, name, type, notnull, dflt_value, pk
+            FROM tables CROSS JOIN pragma_table_info(tables.tableName) fields""", []).fetchall()
+        # TODO
+        pass
 
+    
+    def load_db_from_spreadsheet(
+            self, spreadsheet_path:str="db/database.ods",
+            mode:Literal["add or fail", "add or ignore", "update or add", "delete and add"
+                ]="update or add"
+            ) -> None:
+        """ Populates database data with spreadsheet data
+        WARNING add or fail mode will fail if a spreadsheet record's display name already exists
+        WARNING delete and add mode will delete all prior records in the table """
+        # Load spreadsheet data
+        excel_file = ExcelFile(spreadsheet_path)
+        data = {tab:clean_df(excel_file.parse(tab)) for tab in excel_file.sheet_names}
         # Fill tables
-        for table in data:
-            # TODO check unknown fields and field order
-            # TODO force type?
-            data[table].to_sql(name=table, con=self.con, if_exists="append", index=False)
-            # # Debug print
-            # if self._verbose:
-            #     headers, results = self.fetch_query(f"""SELECT * FROM {table}""")
-            #     self._vprint(table)
-            #     self._vprint(headers)
-            #     self._vprint(results)
-            #     self._vprint()
+        for table_name in data:
+            # Check for unknown table or fields and get the existing ones
+            table = self.data_model.get_table(table_name)
+            fields = table.get_fields(data[table_name].columns)
+            rows = [[i for i in row] for row in data[table_name].itertuples(index=False)]
+            # Empty the database table if requested
+            if mode == "delete and add": self.clear_table(table)
+            # DataFrame.to_sql doesn't fill generated fields so it cannot be used
+            # data[table_name].to_sql(name=table_name, con=self.con, if_exists="replace", index=False)
+            for row in rows:
+                to_add = Record(table, values={field:value for field, value in zip(fields, row)})
+                if mode=="add or fail" or mode=="delete and add":
+                    self.create_record_or_fail(to_add) 
+                elif mode=="update or add":
+                    self.create_or_update_record(to_add)
+                elif mode=="add or ignore":
+                    self.create_record_or_ignore(to_add)
+                else: raise ArgumentError(None, message=
+                    "mode must be one of: add or fail, update or add, delete and add, add or ignore")
 
-
+    
     def export_db_to_spreadsheet(
-            self, spreadsheet_path:str="db/data_model_test.ods") -> None:
-        """ Create/overwrite spreadsheet based on database """
+            self, table_names:Optional[List[str]], spreadsheet_path:str="db/database_out.ods",
+            ) -> None:
+        """ Create/overwrite spreadsheet data with database data
+        It is recommended to specify which tables to export
+        WARNING will delete the previous file if it exists """
 
+        # Double check tables
+        tables = [self.data_model.get_table(name) for name in table_names]
         # Load DB data into dataframes
-        tables = list(read_sql_query(
-            "SELECT name FROM sqlite_master WHERE type='table';", self.con)['name'])
-        data = {tbl : read_sql_query(f"SELECT * from {tbl}", self.con) for tbl in tables}
+        data = {
+            table.table_name: read_sql_query(f"SELECT * from {table.table_name}", self.con)
+            for table in tables}
         
         # Delete existing spreadsheet if it exists
         if exists(spreadsheet_path): remove(spreadsheet_path)
@@ -193,9 +211,144 @@ class SQLiteHandler(DBHanler):
         # Write to spreadsheet
         with ExcelWriter(spreadsheet_path, engine='odf') as writer:
             for tab in data:
-                if tab == "sqlite_sequence": continue
                 # Drop automatically generated columns
                 data[tab].drop(["ID", "display_name", "creation_date"], axis=1, inplace=True)
                 # Write table to tab
                 data[tab].to_excel(writer, sheet_name=tab, index=False)
+
     
+    def get_records(
+            self, table_name:str,
+            sort_by:Optional[str]=None,
+            where_condition:Optional[str]=None
+            ) -> List[Record]:
+        """ Return records from database """
+        # Check if requested table exists and get it
+        table = self.data_model.get_table(table_name)
+
+        # Check or get sort by field
+        if sort_by: _ = table.get_field(sort_by)
+        elif table.sort_rows_by: sort_by = table.sort_rows_by.field_name  # = None # DEBUG
+        else: sort_by = None
+
+        # Build query
+        data_query = f'''SELECT *'''
+        data_query += f''' FROM {table_name}'''
+        if where_condition: data_query += f''' WHERE {where_condition}'''
+        if sort_by: data_query += f''' ORDER BY {sort_by}'''
+        
+        # Fetch data
+        data = self.run_query(data_query, []).fetchall()
+
+        # Get non-automatic fields
+        # headers = list(map(lambda attr : attr[0], self.cur.description))
+        records = [Record(table, {h:v for h, v in zip(table.fields, values)}) for values in data]
+        return records
+
+    
+    def clear_table(self, table:Table) -> None:
+        """ Empty the given table of all records """
+        existing_records = self.get_records(table.table_name)
+        for record in existing_records:
+            self.delete_record_or_fail(record)
+
+    def create_or_update_record(self, record:Record) -> None:
+        """ Add a record in the database, update it if it already exists """
+        fields = [field.field_name for field in record.values]
+        values = [f'"{value}"' for value in record.values.values()]
+        sql = f"INSERT INTO {record.parent_table.table_name} ({', '.join(fields)})"
+        sql += f" VALUES ({', '.join(values)}) ON CONFLICT(display_name) DO UPDATE SET "
+        sql += ', '.join(f'{f}={v}' for f, v in zip(fields, values))
+        sql += ";"
+        self.run_query(sql, [])
+
+    def create_record_or_fail(self, record:Record) -> None:
+        """ Add a record in the database, fail if it already exists """
+        sql = f"INSERT OR FAIL INTO {record.parent_table.table_name} ("
+        sql += ', '.join([field.field_name for field in record.values])
+        sql += ") VALUES ("
+        sql += ', '.join(f'"{value}"' for value in record.values.values())
+        sql += ");"
+        self.run_query(sql, [])
+
+    def create_record_or_ignore(self, record:Record) -> None:
+        """ Add a record in the database, pass if it already exists """
+        sql = f"INSERT OR IGNORE INTO {record.parent_table.table_name} ("
+        sql += ', '.join([field.field_name for field in record.values])
+        sql += ") VALUES ("
+        sql += ', '.join(f'"{value}"' for value in record.values.values())
+        sql += ");"
+        self.run_query(sql, [])
+    
+    def update_record_or_fail(self, record:Record) -> None:
+        """ Update a record in the database, fail if it doesn't exist """
+        sql = f"UPDATE OR FAIL {record.parent_table.table_name} SET "
+        sql += ', '.join([
+            '='.join(field.field_name, value)
+            for field, value in record.values.items()])
+        sql += f"WHERE {record.parent_table.table_name}.ID = {record.ID};"
+        self.run_query(sql, [])
+    
+    def delete_record_or_fail(self, record:Record) -> None:
+        """ Delete a record in the database, fail if it doesn't exist """
+        raise NotImplementedError  # TODO
+    
+    def delete_record_or_ignore(self, record:Record) -> None:
+        """ Delete a record in the database, pass if it doesn't exist """
+        raise NotImplementedError  # TODO
+
+
+        
+
+# class SQLiteHandlerForGtk(SQLiteHandler):
+#     def __init__(self, database_path: str = "db/podfics.db", verbose: bool = True):
+#         super().__init__(database_path, verbose)
+    
+
+#     def get_table_content_for_gtk_table(
+#             self, table_name:str,
+#             field_names:Optional[List[str]]=[],
+#             include_display_name:bool=False,
+#             sort_by:Optional[str]=None,
+#             where_condition:Optional[str]=None,
+#             ) -> Tuple[List[str], List[type], List[List[Any]]]:
+#         """ Return table headers, column types and data formatted for Gtk Datastore """
+#         # Get field info
+#         field_info = self.get_fields_info(table_name, field_names)
+        
+#         # Get column names
+#         column_names = ["display_name"] if include_display_name else []
+#         column_names += [field_info[field]["field_name"] for field in field_info]
+        
+#         # Get column types
+#         type_mapping = {"TEXT": str, "INTEGER": int, "BOOLEAN": bool, "DATE":str}
+#         column_types = [str] if include_display_name else []
+#         column_types += [type_mapping[field_info[field]["type"]] for field in field_info]
+
+#         # Get sort order
+#         if not sort_by: sort_by = self.get_table_sort_by(table_name)
+
+#         # Get data
+#         headers, data = self.get_table_data(
+#             table_name, column_names, sort_by, where_condition)
+        
+#         return headers, column_types, data
+
+#     def get_fields_info_for_gtk_form(
+#             self, table_name: str, field_names: List[str] | None = []
+#             ) -> List[Dict[str, Any]]:
+#         """ Return field info"""
+#         print("DEBUG, TODO", self.get_fields_info(table_name))
+
+
+
+if __name__ == "__main__":
+    self = SQLiteHandler(database_path="db/podfics.db", datamodel_path="db/datamodel.ods")
+    self.init_db_from_model()
+    self.load_db_from_spreadsheet(spreadsheet_path="db/database.ods", mode="delete and add")
+    # self.load_db_from_spreadsheet(spreadsheet_path="db/database test.ods", mode="add or ignore")
+    # self.export_db_to_spreadsheet(
+    #     spreadsheet_path="db/database_out.ods", table_names=["archive_warning"])
+    # self.debug_schema()
+    data = self.get_records(table_name="archive_warning")
+    print(data)

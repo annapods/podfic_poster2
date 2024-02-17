@@ -4,7 +4,13 @@
 
 [x] init from spreadsheet
 [x] save in spreadsheet
+[ ] save data model to spreadsheet?
+[ ] debug_schema
+[ ] data types (file, handler, doc)
+[ ] records in GUI
+[ ] delete_record_or fail, delete_record_or_ignore
 [ ] test save then init from spreadsheet -> types, etc
+[ ] fill static tables
 
 ## Graphic interface
 

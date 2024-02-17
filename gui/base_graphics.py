@@ -1,6 +1,7 @@
 from argparse import ArgumentError
 from typing import Any, List, Literal, Optional, Tuple
 import gi
+# from gui.application import BaseApplication
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
@@ -79,15 +80,36 @@ def generate_table(
     return widget, treeview, datastore
         
 
-class BaseWindow(Gtk.Window):
-
-    def __init__(self, title:str):
-        super().__init__(title=title)
-        self.set_border_width(10)
-
-        # Setting up the self.grid in which the elements are to be positioned
-        self.grid = Gtk.Grid()
-        self.grid.set_column_homogeneous(True)
-        self.grid.set_row_homogeneous(True)
+class PaddedFrame(Gtk.Frame):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.grid = PaddedGrid()
         self.add(self.grid)
 
+
+class PaddedGrid(Gtk.Grid):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.set_row_spacing(5)
+        self.set_border_width(5)
+        self.set_column_homogeneous(True)
+        self.set_row_homogeneous(True)
+        self.last_added = None
+
+    def attach_next(
+            self, widget:Gtk.Widget, position=Gtk.PositionType.BOTTOM,
+            width:int=1, height:int=1) -> None:
+        if self.last_added is None:
+            self.attach(widget, 0, 0, width, height)
+            self.last_added = widget
+        else:
+            self.attach_next_to(widget, self.last_added, position, width, height)
+            self.last_added = widget
+    
+    def attach(self, widget:Gtk.Widget, *args, **kwargs) -> None:
+        super().attach(widget, *args, **kwargs)
+        self.last_added = widget
+    
+    def attach_next_to(self, widget:Gtk.Widget, *args, **kwargs) -> None:
+        super().attach_next_to(widget, *args, **kwargs)
+        self.last_added = widget

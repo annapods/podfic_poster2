@@ -42,14 +42,13 @@ class RecordManager(PaddedGrid):
     def __init__(self, db_handler):
         super().__init__()
         self.db_handler = db_handler
-        print("debug 1", self.db_handler)
 
     def load_existing(self, table, display_name):
         headers, types, content = self.db_handler.get_table_content_for_gtk_table(
             table, include_display_name=True,
             sort_by=self.db_handler.get_table_sort_by(table),
             where_condition=f"""display_name='{display_name}'""")
-        print("existing record", headers)
+        print("DEBUG existing record", headers)
         # ['display_name', 'ao3_tag', 'abbreviation']
         # [<class 'str'>, <class 'str'>, <class 'str'>]
         # [('Choose Not To Use Archive Warnings', 'Choose Not To Use Archive Warnings', 'choose not to use')])
@@ -59,8 +58,8 @@ class RecordManager(PaddedGrid):
         test = self.db_handler.get_table_content_for_gtk_table(
             table, include_display_name=True,
             sort_by=self.db_handler.get_table_sort_by(table))
-        print("new", test)
+        print("DEBUG new", test)
 
     def load_empty(self):
-        print("empty")
+        print("DEBUG empty")
         pass
