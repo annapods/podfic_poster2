@@ -12,7 +12,7 @@ class DBManager(PaddedGrid):
 
     def __init__(self):
         super().__init__()
-        self.db_path = None
+        self.db_path = "db/podfics.db"  # DEBUG, shouldn't be here?
         self.db_handler = None
         self.current_table = None
         self.current_fields = []
@@ -73,7 +73,7 @@ class DBManager(PaddedGrid):
             record_buttons_grid, Gtk.PositionType.BOTTOM, 3, 1)
 
         # Record form
-        self._reload_db()
+        self._record_grid = None
         self._record_grid = RecordManager(self.db_handler)
         record_frame = PaddedFrame(label="Record form")
         # swap default grid for RecordManager

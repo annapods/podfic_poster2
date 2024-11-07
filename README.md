@@ -1,6 +1,7 @@
 # Podfic poster
 
-I'm lazy so I decided to automatize my podfic posting process. That's it.
+I'm lazy so I decided to automatize my podfic posting process.
+This is the second version, because I'm also a perfectionist and I wanted a real database with a real user interface.
 
 ## Licence
 

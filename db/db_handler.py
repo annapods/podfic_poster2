@@ -1,6 +1,5 @@
 """ Database handlers """
 
-from argparse import ArgumentError
 from sqlite3 import OperationalError, connect
 from typing import Any, Dict, Literal, Optional, List, Tuple, Union
 from pandas import ExcelWriter, Series, ExcelFile, read_sql_query, DataFrame
@@ -192,14 +191,18 @@ class SQLiteHandler(DataHandler):
 
     
     def export_db_to_spreadsheet(
-            self, table_names:Optional[List[str]], spreadsheet_path:str="db/database_out.ods",
+            self, table_names:Optional[List[str]]=[], spreadsheet_path:str="db/database_out.ods",
             ) -> None:
         """ Create/overwrite spreadsheet data with database data
         It is recommended to specify which tables to export
         WARNING will delete the previous file if it exists """
 
-        # Double check tables
-        tables = [self.data_model.get_table(name) for name in table_names]
+        if table_names:
+            # Double check tables
+            tables = [self.data_model.get_table(name) for name in table_names]
+        else:
+            tables = self.data_model.tables
+            print(tables)
         # Load DB data into dataframes
         data = {
             table.table_name: read_sql_query(f"SELECT * from {table.table_name}", self.con)
@@ -343,12 +346,7 @@ class SQLiteHandler(DataHandler):
 
 
 if __name__ == "__main__":
-    self = SQLiteHandler(database_path="db/podfics.db", datamodel_path="db/datamodel.ods")
-    self.init_db_from_model()
-    self.load_db_from_spreadsheet(spreadsheet_path="db/database.ods", mode="delete and add")
-    # self.load_db_from_spreadsheet(spreadsheet_path="db/database test.ods", mode="add or ignore")
-    # self.export_db_to_spreadsheet(
-    #     spreadsheet_path="db/database_out.ods", table_names=["archive_warning"])
-    # self.debug_schema()
-    data = self.get_records(table_name="archive_warning")
-    print(data)
+    handler = SQLiteHandler(database_path="db/podfics.db", datamodel_path="db/datamodel.ods")
+    handler.init_db_from_model()
+    handler.load_db_from_spreadsheet(spreadsheet_path="db/set_options.ods", mode="delete and add")
+    handler.export_db_to_spreadsheet(spreadsheet_path="db/database_out.ods")

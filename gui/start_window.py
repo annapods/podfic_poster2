@@ -41,6 +41,7 @@ class StartWindow(Gtk.ApplicationWindow):  # MainWindow
         self.main_grid.attach(left_menu, 0, 0, 1, 1)
 
         # DB Manager
+        print("debug4")
         right_content.add_titled(DBManager(), "db_manager", "DB Manager")
 
         # Example of simple label content

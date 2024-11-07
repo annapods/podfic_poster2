@@ -1,6 +1,6 @@
 from typing import Any, Optional
 from gui.base_graphics import gi, PaddedGrid
-from gi.overrides.Gtk import Entry
+from gi.repository.Gtk import Entry
 
 
 def get_field_widget(type:type, default_value:Optional[Any]) -> Any:
