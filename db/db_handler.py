@@ -10,6 +10,7 @@ from db.db_objects import DataModel, Field, Record, Table, clean_df
 from src.base_object import BaseObject
 
 
+
 class Singleton(type): 
     # Inherit from "type" in order to gain access to method __call__
     def __init__(self, *args, **kwargs):
@@ -68,7 +69,10 @@ class DataHandler(BaseObject, metaclass=Singleton):
 
 class SQLiteHandler(DataHandler):
     """ SQLite database handler """
-   
+
+    # There are more data types in our application than in sqlite3
+    type_mapping = {"TEXT": "TEXT", "INTEGER": "INTEGER", "BOOLEAN": "BOOLEAN", "DATE":"DATE", "FILEPATH":"TEXT", "LENGTH":"TEXT"}
+
     def __init__(
             self, database_path:str="db/podfics.db", datamodel_path:str="db/datamodel.ods",
             verbose:bool=True):
@@ -113,7 +117,7 @@ class SQLiteHandler(DataHandler):
         """ Create/overwrite database based on model """
         
         def get_field_sql(field:Field) -> str:
-            sql = f"{field.field_name} {field.type}"
+            sql = f"{field.field_name} {SQLiteHandler.type_mapping[field.type]}"
             sql += " NOT NULL" if field.mandatory else ""
             sql += f" DEFAULT {field.default_value}" if field.default_value else ""
             sql += f" REFERENCES {field.foreign_key_table.display_name}(ID)" +\
@@ -202,7 +206,7 @@ class SQLiteHandler(DataHandler):
             tables = [self.data_model.get_table(name) for name in table_names]
         else:
             tables = self.data_model.tables
-            print(tables)
+            print("Exporting tables:", tables)
         # Load DB data into dataframes
         data = {
             table.table_name: read_sql_query(f"SELECT * from {table.table_name}", self.con)
@@ -221,13 +225,14 @@ class SQLiteHandler(DataHandler):
 
     
     def get_records(
-            self, table_name:str,
+            self, table:Table|str,
             sort_by:Optional[str]=None,
             where_condition:Optional[str]=None
             ) -> List[Record]:
         """ Return records from database """
-        # Check if requested table exists and get it
-        table = self.data_model.get_table(table_name)
+        # If table name was given instead of table object, check it exists and get it
+        if type(table) == str:
+            table = self.data_model.get_table(table)
 
         # Check or get sort by field
         if sort_by: _ = table.get_field(sort_by)
@@ -236,10 +241,9 @@ class SQLiteHandler(DataHandler):
 
         # Build query
         data_query = f'''SELECT *'''
-        data_query += f''' FROM {table_name}'''
+        data_query += f''' FROM {table.table_name}'''
         if where_condition: data_query += f''' WHERE {where_condition}'''
         if sort_by: data_query += f''' ORDER BY {sort_by}'''
-        
         # Fetch data
         data = self.run_query(data_query, []).fetchall()
 
@@ -247,6 +251,28 @@ class SQLiteHandler(DataHandler):
         # headers = list(map(lambda attr : attr[0], self.cur.description))
         records = [Record(table, {h:v for h, v in zip(table.fields, values)}) for values in data]
         return records
+    
+    def get_record(
+            self, table:Table|str,
+            display_name:str
+        ) -> Record:
+        """ Return record from database """
+        # If table name was given instead of table object, check it exists and get it
+        if type(table) == str:
+            table = self.data_model.get_table(table)
+        
+        # Build query
+        data_query = f'''SELECT *'''
+        data_query += f''' FROM {table.table_name}'''
+        data_query += f''' WHERE {table.table_name}.display_name = "{display_name}";'''
+        # Fetch data
+        data = self.run_query(data_query, []).fetchall()[0]
+
+        # Get non-automatic fields
+        # headers = list(map(lambda attr : attr[0], self.cur.description))
+        record = Record(table, {h:v for h, v in zip(table.fields, data)})
+        print("DEBUG","record",record)
+        return record
 
     
     def clear_table(self, table:Table) -> None:
@@ -301,52 +327,10 @@ class SQLiteHandler(DataHandler):
         raise NotImplementedError  # TODO
 
 
-        
-
-# class SQLiteHandlerForGtk(SQLiteHandler):
-#     def __init__(self, database_path: str = "db/podfics.db", verbose: bool = True):
-#         super().__init__(database_path, verbose)
-    
-
-#     def get_table_content_for_gtk_table(
-#             self, table_name:str,
-#             field_names:Optional[List[str]]=[],
-#             include_display_name:bool=False,
-#             sort_by:Optional[str]=None,
-#             where_condition:Optional[str]=None,
-#             ) -> Tuple[List[str], List[type], List[List[Any]]]:
-#         """ Return table headers, column types and data formatted for Gtk Datastore """
-#         # Get field info
-#         field_info = self.get_fields_info(table_name, field_names)
-        
-#         # Get column names
-#         column_names = ["display_name"] if include_display_name else []
-#         column_names += [field_info[field]["field_name"] for field in field_info]
-        
-#         # Get column types
-#         type_mapping = {"TEXT": str, "INTEGER": int, "BOOLEAN": bool, "DATE":str}
-#         column_types = [str] if include_display_name else []
-#         column_types += [type_mapping[field_info[field]["type"]] for field in field_info]
-
-#         # Get sort order
-#         if not sort_by: sort_by = self.get_table_sort_by(table_name)
-
-#         # Get data
-#         headers, data = self.get_table_data(
-#             table_name, column_names, sort_by, where_condition)
-        
-#         return headers, column_types, data
-
-#     def get_fields_info_for_gtk_form(
-#             self, table_name: str, field_names: List[str] | None = []
-#             ) -> List[Dict[str, Any]]:
-#         """ Return field info"""
-#         print("DEBUG, TODO", self.get_fields_info(table_name))
-
-
-
 if __name__ == "__main__":
     handler = SQLiteHandler(database_path="db/podfics.db", datamodel_path="db/datamodel.ods")
     handler.init_db_from_model()
+    handler.load_db_from_spreadsheet(spreadsheet_path="db/datamodel.ods", mode="delete and add")
     handler.load_db_from_spreadsheet(spreadsheet_path="db/set_options.ods", mode="delete and add")
+    handler.load_db_from_spreadsheet(spreadsheet_path="db/parameters.ods", mode="delete and add")
     handler.export_db_to_spreadsheet(spreadsheet_path="db/database_out.ods")

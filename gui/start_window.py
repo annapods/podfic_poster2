@@ -8,12 +8,17 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
 
-class StartWindow(Gtk.ApplicationWindow):  # MainWindow
+class StartWindow(Gtk.ApplicationWindow):
+    """ Main window of the application, navigation level
+    Contains a menu to the left that selects the content of the panel to the left
+    https://stackoverflow.com/questions/44509994/create-a-simple-tabbed-multi-page-application-with-python-and-gtk """
+
     def __init__(self, application):
-        """ https://stackoverflow.com/questions/44509994/create-a-simple-tabbed-multi-page-application-with-python-and-gtk """
+        """ """
         super().__init__(application=application, title="WIP Podfic Poster")
 
-        # TODO
+        # TODO for now, the only DBHandler is in the db_management_widget level
+        # this allows for easily switching DB files, but we're going to need db functionalities in other modules too
         self.db_handler = None
 
         # Main grid
@@ -41,12 +46,19 @@ class StartWindow(Gtk.ApplicationWindow):  # MainWindow
         self.main_grid.attach(left_menu, 0, 0, 1, 1)
 
         # DB Manager
-        print("debug4")
         right_content.add_titled(DBManager(), "db_manager", "DB Manager")
 
-        # Example of simple label content
-        label = Gtk.Label(label="label 1 text inside")
-        right_content.add_titled(label, "label_1_name", "label 1 menu title")
+        # # Example of simple label content
+        # content = Gtk.Label(label="this text shows in the right panel")
+        # right_content.add_titled(content, "label_1_name", "menu title")
+
+        # Project main view, for later
+        placeholder = Gtk.Label(label="TODO")
+        right_content.add_titled(placeholder, "projects", "Projects")
+
+        # Application parameters, for later
+        placeholder = Gtk.Label(label="TODO")
+        right_content.add_titled(placeholder, "settings", "Settings")
 
         self.show_all()
 
@@ -54,6 +66,7 @@ class StartWindow(Gtk.ApplicationWindow):  # MainWindow
 
 
 class PodficApplication(Gtk.Application):
+    """ Application, highest level """
     
     def __init__(self, *args, **kwargs):
         super().__init__(
