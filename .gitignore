@@ -1,5 +1,8 @@
 # Data
 db/*.db
+database_out.ods
+*.~lock*.ods#
+db/parameter.ods
 
 # IDE stuff
 .vscode
