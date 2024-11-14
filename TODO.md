@@ -7,27 +7,45 @@
 [-] save data model to spreadsheet
 [x] debug_schema
 [x] fill static tables
+[!] debug display name concatenation
+[ ] parameter table and secrets
 [ ] data types (file, handler, doc)
     [ ] document field types in doc
     [ ] any data type control on import?
     [ ] ...?
-[ ] records in GUI
-[ ] delete_record_or_fail, delete_record_or_ignore
+[ ] delete_record_or_fail
+[ ] delete_record_or_ignore
 [ ] test save then init from spreadsheet -> types, etc
 
 ## Graphic interface
 
 [ ] Database Manager
-    [ ] pick database
-    [ ] show tables, fields, records
-    [ ] reload
-    [ ] run command
-    [ ] insert button -> open new window
-        [ ] text fields from data model
-        [ ] integer fields from data model
-        [ ] date and datetime fields from data model
-        [ ] foreign key dropdowns from data model
-    [ ] update record button -> pre-fill form with values
+    [x] pick database
+    [x] pick table
+    [x] pick record
+    [x] reload dynamically
+    [ ] show record
+        [x] text
+        [x] boolean
+        [ ] int
+            [ ] doesn't show values not 0
+        [x] ext no options
+        [ ] ext radio buttons
+            [ ] default or lack thereof
+        [ ] ext dropdown
+        [?] ext table
+        [ ] filepath
+        [ ] length
+        [ ] date
+    [ ] save record (create)
+    [~] save record (edit)
+    [ ] delete record
+        [ ] if edit, popup
+        [ ] if new, cancel
+    [ ] cancel
+        [x] edit -> reset to current record
+        [ ] create -> reset to default values
+    [ ] fix horizontal stretch when showing record form
 
 [ ] Projects Handler
     [ ] show projects

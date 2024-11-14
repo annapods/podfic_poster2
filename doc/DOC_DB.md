@@ -23,9 +23,9 @@ The `data_field` tab contains nine columns, which are as follows:
 - `type` is mandatory. More on types later.
 - `foreign_key_table` is to be filled when the field is a foreign key table. It should contain the `table_name` of that foreign table. More on foreign keys later.
 - `mandatory` is a boolean, which means that it can be equal to `TRUE` or `FALSE`. It is mandatory. If true, the given field will be mandatory.
+- `editable` indicates whether the values of the field will generally be editable. It is a boolean and is mandatory. It is usually set to true. If false, there might not be any way to edit the values of that column in the GUI.
 - `default value`, not mandatory.
 - `part_of_record_display_name` indicates whether the value of that field will be used to create the display name of the records in the table. It is a boolean and is mandatory. More on display names later on.
-- `display_in_table` indicates whether the column will be displayed in generic GUI tables. It is a boolean and is mandatory. It is usually set to true. If false, there might not be any way to edit the values of that column in the GUI.
 - `display_order` indicates the order of the columns in generic GUI tables. It is an int and is not mandatory.
 
 ## Field types

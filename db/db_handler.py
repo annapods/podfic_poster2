@@ -37,6 +37,11 @@ class DataHandler(BaseObject, metaclass=Singleton):
         self.database_path = database_path
         self.data_model = DataModel(datamodel_path)
     
+    def change_db(self, database_path:str, datamodel_path:str="db/datamodel.ods"):
+        """ Change which database the handler connects to
+        A new handler cannot be created because it is a singleton """
+        raise NotImplementedError
+    
     def init_db_from_model(self) -> None:
         """ Create/overwrite database based on model """
         raise NotImplementedError
@@ -80,6 +85,15 @@ class SQLiteHandler(DataHandler):
         self.con = connect(self.database_path)
         self.cur = self.con.cursor()
 
+    def change_db(self, database_path:str="db/podfics.db", datamodel_path:str="db/datamodel.ods"):
+        """ Change which database the handler connects to
+        A new handler cannot be created because it is a singleton """
+        self.database_path = database_path
+        self.data_model = DataModel(datamodel_path)
+        self.con.close()
+        self.con = connect(self.database_path)
+        self.cur = self.con.cursor()
+
     def __del__(self) -> None:
         """ Close connection on deletion of object """
         try: self.con.close()
@@ -90,9 +104,10 @@ class SQLiteHandler(DataHandler):
         try:
             res = self.cur.execute(query, parameters)
         except Exception as e:
-            print("DEBUG query failed", query)
-            self._vprint("DEBUG headers", list(map(lambda attr : attr[0], self.cur.description)))
-            self._vprint("DEBUG data", res.fetchall())
+            self._vprint(f"DEBUG query failed {query}")
+            self._vprint(f"DEBUG db {self.database_path}")
+            self._vprint(f"DEBUG headers {list(map(lambda attr : attr[0], self.cur.description))}")
+            self._vprint(f"DEBUG data {res.fetchall()}")
             raise e
         self.con.commit()
         return res
@@ -107,10 +122,9 @@ class SQLiteHandler(DataHandler):
         print("DB schema:", schema)
         try:
             table_contents = self.run_query(f"SELECT * FROM {debug_table};", []).fetchall()
-            print(debug_table+":", table_contents)
+            self._vprint(debug_table+":", table_contents, "\n")
         except OperationalError as e:
-            print(debug_table+":", e)
-        print()
+            self._vprint(debug_table+":", e)
 
     
     def init_db_from_model(self) -> None:
@@ -196,6 +210,7 @@ class SQLiteHandler(DataHandler):
     
     def export_db_to_spreadsheet(
             self, table_names:Optional[List[str]]=[], spreadsheet_path:str="db/database_out.ods",
+            exclude_parameters:Optional[bool]=True
             ) -> None:
         """ Create/overwrite spreadsheet data with database data
         It is recommended to specify which tables to export
@@ -205,8 +220,11 @@ class SQLiteHandler(DataHandler):
             # Double check tables
             tables = [self.data_model.get_table(name) for name in table_names]
         else:
-            tables = self.data_model.tables
-            print("Exporting tables:", tables)
+            if exclude_parameters:
+                tables = [table for table in self.data_model.tables if table.table_name != "parameter"]
+            else:
+                tables = self.data_model.tables
+            self._vprint(f"Exporting tables: {tables}")
         # Load DB data into dataframes
         data = {
             table.table_name: read_sql_query(f"SELECT * from {table.table_name}", self.con)
@@ -266,12 +284,14 @@ class SQLiteHandler(DataHandler):
         data_query += f''' FROM {table.table_name}'''
         data_query += f''' WHERE {table.table_name}.display_name = "{display_name}";'''
         # Fetch data
-        data = self.run_query(data_query, []).fetchall()[0]
+        data = self.run_query(data_query, []).fetchall()
+        if not data:
+            print(f"DEBUG couldn't find record for {display_name} in {table.table_name}")
+            raise Exception
 
         # Get non-automatic fields
         # headers = list(map(lambda attr : attr[0], self.cur.description))
-        record = Record(table, {h:v for h, v in zip(table.fields, data)})
-        print("DEBUG","record",record)
+        record = Record(table, {h:v for h, v in zip(table.fields, data[0])})
         return record
 
     
@@ -287,7 +307,7 @@ class SQLiteHandler(DataHandler):
         values = [f'"{value}"' for value in record.values.values()]
         sql = f"INSERT INTO {record.parent_table.table_name} ({', '.join(fields)})"
         sql += f" VALUES ({', '.join(values)}) ON CONFLICT(display_name) DO UPDATE SET "
-        sql += ', '.join(f'{f}={v}' for f, v in zip(fields, values))
+        sql += ', '.join(f'{f}="{v}"' for f, v in zip(fields, values) if f!="display_name")
         sql += ";"
         self.run_query(sql, [])
 
@@ -311,11 +331,11 @@ class SQLiteHandler(DataHandler):
     
     def update_record_or_fail(self, record:Record) -> None:
         """ Update a record in the database, fail if it doesn't exist """
+        fields = [field.field_name for field in record.values]
+        values = [f'"{value}"' for value in record.values.values()]
         sql = f"UPDATE OR FAIL {record.parent_table.table_name} SET "
-        sql += ', '.join([
-            '='.join(field.field_name, value)
-            for field, value in record.values.items()])
-        sql += f"WHERE {record.parent_table.table_name}.ID = {record.ID};"
+        sql += ', '.join([f'{f}={v}' for f, v in zip(fields, values) if f!="display_name"])
+        sql += f" WHERE {record.parent_table.table_name}.ID = {record.ID};"
         self.run_query(sql, [])
     
     def delete_record_or_fail(self, record:Record) -> None:
@@ -332,5 +352,5 @@ if __name__ == "__main__":
     handler.init_db_from_model()
     handler.load_db_from_spreadsheet(spreadsheet_path="db/datamodel.ods", mode="delete and add")
     handler.load_db_from_spreadsheet(spreadsheet_path="db/set_options.ods", mode="delete and add")
-    handler.load_db_from_spreadsheet(spreadsheet_path="db/parameters.ods", mode="delete and add")
+    handler.load_db_from_spreadsheet(spreadsheet_path="db/parameter.ods", mode="delete and add")
     handler.export_db_to_spreadsheet(spreadsheet_path="db/database_out.ods")

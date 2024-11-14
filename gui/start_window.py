@@ -2,6 +2,7 @@ import sys
 
 import gi
 
+from gui.base_graphics import get_scroll_window
 from gui.db_management_widget import DBManager
 
 gi.require_version("Gtk", "3.0")
@@ -17,28 +18,25 @@ class StartWindow(Gtk.ApplicationWindow):
         """ """
         super().__init__(application=application, title="WIP Podfic Poster")
 
+        # Only affects the overall window, as if the user had resized it
+        self.set_default_size(800,750)
+
         # TODO for now, the only DBHandler is in the db_management_widget level
         # this allows for easily switching DB files, but we're going to need db functionalities in other modules too
         self.db_handler = None
 
-        # Main grid
+        # Main grid, will only contain right content panel and left navigation sidebar
         self.main_grid = Gtk.Grid()
-        self.main_grid.set_column_homogeneous(False)
-        self.main_grid.set_row_homogeneous(True)
+        # self.main_grid.set_column_homogeneous(False)
         self.add(self.main_grid)
 
-        # Right panel for content
+        # Right panel for content, will be filled dynamically by the options of the left navifation sidebar
         right_content = Gtk.Stack()
-        right_content.set_hexpand(True)
-        right_content.set_vexpand(False)
         right_content.set_border_width(10)
-
-        right_scrollable = Gtk.ScrolledWindow()
-        right_scrollable.set_vexpand(True)
+        # Scrollable vertically
+        right_scrollable = get_scroll_window()  # Gtk.ScrolledWindow()
         right_scrollable.add(right_content)
-        right_scrollable.set_propagate_natural_width(True)
-        right_scrollable.set_propagate_natural_height(True)
-        self.main_grid.attach(right_scrollable, 1, 0, 5, 1)
+        self.main_grid.attach(right_scrollable, 1, 0, 1, 1)  # right, top, width, height
 
         # Left menu for navigation
         left_menu = Gtk.StackSidebar()

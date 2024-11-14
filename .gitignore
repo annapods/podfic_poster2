@@ -1,6 +1,5 @@
-# # Fandom taxonomies
-# fandom_taxonomy.db
-# fandom_taxonomy.csv
+# Data
+db/*.db
 
 # IDE stuff
 .vscode
@@ -8,6 +7,7 @@
 # Setting files
 client_secrets.json
 settings.json
+parameters.ods
 
 # Code from other sources
 ao3downloader/

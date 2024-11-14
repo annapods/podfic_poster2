@@ -148,11 +148,11 @@ The data_field tab must contain 9 columns. Each line describes a field in a tabl
 - foreign_key_table, the name of the table this field refers to, if applicable,
 - mandatory, TRUE if this field must be filled when the line is created in the database
 - default_value
+- editable, TRUE if the field must be editable in the application when displaying the record
 - part_of_display_name, TRUE if the field must be part of the unique identifier of the record and displayed when selecting a record
-- display_in_table, TRUE if the field must be shown in the application when displaying the table
 - display_order, the order in which to show the fields in the application
 
-The columns default_value, display_in_table and display_order can be edited freely. Rows can be added.
+The columns default_value and display_order can be edited freely. Rows can be added.
 
 3 fields are automatically added to every tableID:
 - ID, the technical ID number, which is never shown to the user

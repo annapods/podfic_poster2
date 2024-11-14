@@ -43,7 +43,7 @@ class Field(BaseDataObject):
             self, parent_table:BaseDataObject, field_name:str, type:str,
             foreign_key_table:Optional[BaseDataObject]=None,
             part_of_display_name:Optional[bool]=False, mandatory:Optional[bool]=False,
-            default_value:Optional[str]="", display_in_table:Optional[bool]=True,
+            editable:Optional[bool]=True, default_value:Optional[str]="",
             display_order:Optional[int]=1000000, verbose:Optional[bool]=True):
         """ NOTE parent_table and foreign_key_table are Table objects
         Order of declaration in the file doesn't allow for more specific type hinting """
@@ -55,8 +55,8 @@ class Field(BaseDataObject):
         self.foreign_key_table = foreign_key_table
         self.part_of_display_name = part_of_display_name
         self.mandatory = mandatory
+        self.editable = editable
         self.default_value = default_value
-        self.display_in_table = display_in_table
         self.display_order = display_order
 
     def __str__(self) -> str:
@@ -99,7 +99,7 @@ class Record(BaseDataObject):
             self, parent_table:Table,
             values:Dict[Field, Any], verbose:Optional[bool]=True) -> None:
         super().__init__(
-            values.pop(parent_table.get_field("display_name"), "no display name yet"), verbose)
+            values.get(parent_table.get_field("display_name"), "no display name yet"), verbose)
         self.ID = values.pop(parent_table.get_field("ID"), -1)
         self.values = values
         self.parent_table = parent_table
@@ -132,7 +132,7 @@ class DataModel(BaseObject):
         
         field_info = [
             "field_name", "type", "foreign_key_table", "part_of_display_name", "mandatory",
-            "default_value", "display_in_table", "display_order"]
+            "editable", "default_value", "display_order"]
         
         # Load fields in tables in model
         for table in self.tables:
@@ -145,12 +145,12 @@ class DataModel(BaseObject):
         # Add ID, display_name and creation_date fields to tables
         for table in self.tables:
             table.fields = [
-                    Field(table, "ID", "INTEGER", mandatory=True, display_in_table=False,
+                    Field(table, "ID", "INTEGER", mandatory=True, editable=False,
                         display_order=-2),
-                    Field(table, "display_name", "TEXT", mandatory=True, display_in_table=False,
+                    Field(table, "display_name", "TEXT", mandatory=True, editable=False,
                         display_order=-1),
                 ] + table.fields + [
-                    Field(table, "creation_date", "DATE", mandatory=True)
+                    Field(table, "creation_date", "DATE", mandatory=True, editable=False)
                 ]
             
         # Crosslink sort_rows_by and foreign_key_table with the actual objects
