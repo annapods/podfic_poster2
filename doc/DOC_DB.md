@@ -1,9 +1,9 @@
 # Database documentation
 
-## Data model
+## Spreadsheet data model
 
 The data model is separate from the data itself.
-In the python program, it is represented by a DataModel object. This object is initiated from a .ods spreadsheet.
+In the python program, it is represented by a DataModel object (see later). This object is initiated from a .ods spreadsheet.
 The spreadsheet cannot be initiated from an existing database by the DataHandler yet, that's #TODO.
 The spreadsheet contains two tabs, `data_table` and `data_field`.
 
@@ -30,9 +30,12 @@ The `data_field` tab contains nine columns, which are as follows:
 
 ## Field types
 
-There are [TODO] field types.
+There are currently [TODO] field types:
 
-- [TODO]
+- TEXT
+- BOOLEAN
+- INT
+- 
 
 ## Technical ID, display names and foreign keys
 
@@ -62,3 +65,12 @@ python db/db_handler.py
 ### Archiving and reusing
 
 You can export the current database into a spreadsheet using the `export_db_to_spreadsheet` method of the database handler.
+
+## Data handling in python
+
+
+
+The DataModel contains Table and Field objects.
+
+Data entries are represented by Record objects. These records are not loaded in the data model, but can be fetched by the data handler.
+

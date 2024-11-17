@@ -8,13 +8,16 @@
 [x] debug_schema
 [x] fill static tables
 [!] debug display name concatenation
-[ ] parameter table and secrets
-[ ] data types (file, handler, doc)
-    [ ] document field types in doc
-    [ ] any data type control on import?
-    [ ] ...?
 [ ] delete_record_or_fail
 [ ] delete_record_or_ignore
+[ ] data control
+    [ ] data types (file, handler, doc)
+        [ ] document field types in doc
+        [ ] any data type control on import?
+        [ ] ...?
+    [ ] mandatory fields
+[ ] parameter table and secrets
+[ ] DBHandler() returns the singleton object -> no need to pass the reference in calls
 [ ] test save then init from spreadsheet -> types, etc
 
 ## Graphic interface
@@ -22,6 +25,7 @@
 [ ] Database Manager
     [x] pick database
     [x] pick table
+        [ ] column order
     [x] pick record
     [x] reload dynamically
     [ ] show record

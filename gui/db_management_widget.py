@@ -1,12 +1,12 @@
 from typing import Any, List, Optional
-from db.db_objects import Record, Table
-from gui.base_graphics import MultiSelectTable, PaddedFrame, PaddedGrid, SingleSelectTable, TableGrid
 from gi.repository import Gtk
-from db.db_handler import SQLiteHandler
 from gi.overrides.Gtk import Button
 
-from gui.db_record_widget import RecordManager
 
+from db.handler import SQLiteHandler
+from gui.forms import RecordManager
+from gui.base_graphics import PaddedFrame, PaddedGrid
+from gui.tables import MultiSelectTable, SingleSelectTable
 
 
 class DBManager(PaddedGrid):
@@ -47,7 +47,7 @@ class DBManager(PaddedGrid):
         self.attach_next(self._records_table)
 
         # Record form
-        self._record_grid = RecordManager(self.db_handler)
+        self._record_grid = RecordManager()
         record_frame = PaddedFrame(label="Record form")
         # swap default grid for RecordManager
         record_frame.remove(record_frame.grid)
@@ -134,12 +134,9 @@ class DBManager(PaddedGrid):
     def _on_records_selection_changed(self) -> None:
         """ Callback for record selection """
         current_record_id = self._records_table.current_selection
-        print("DEBUG 1", current_record_id, self.current_table)
         if current_record_id and self.current_table:
-            print("DEBUG 2")
             self.current_record = self.db_handler.get_record(table=self.current_table, display_name=current_record_id)
         else: self.current_record = None
-        print("DEBUG 3", self.current_record)
         self._reload_record_form()
         
 
@@ -147,8 +144,3 @@ class DBManager(PaddedGrid):
     def on_button_reload_clicked(self, button:Button) -> None:
         """ """
         self._reload_db()
-
-    def on_button_delete_clicked(self, button:Button) -> None:
-        """ """
-        # TODO confirmation popup
-        pass

@@ -6,25 +6,11 @@ from pandas import ExcelWriter, Series, ExcelFile, read_sql_query, DataFrame
 from numpy import nan
 from os import remove
 from os.path import exists
-from db.db_objects import DataModel, Field, Record, Table, clean_df
-from src.base_object import BaseObject
 
 
-
-class Singleton(type): 
-    # Inherit from "type" in order to gain access to method __call__
-    def __init__(self, *args, **kwargs):
-        self.__instance = None # Create a variable to store the object reference
-        super().__init__(*args, **kwargs)
-
-    def __call__(self, *args, **kwargs):
-        if self.__instance is None:
-            # if the object has not already been created
-            self.__instance = super().__call__(*args, **kwargs) # Call the __init__ method of the subclass (Spam) and save the reference
-            return self.__instance
-        else:
-            # if object (Spam) reference already exists; return it
-            return self.__instance
+from db.objects import DataModel, Field, Record, Table, clean_df, TextField, BoolField, IntField, FilepathField, LengthField, DateField
+from db.objects import spreadsheet_to_py_type_mapping, py_to_spreadsheet_type_mapping
+from src.base_object import BaseObject, Singleton
 
 
 class DataHandler(BaseObject, metaclass=Singleton):
@@ -32,10 +18,12 @@ class DataHandler(BaseObject, metaclass=Singleton):
     Database handlers load in memory the model of the database, but they don't load the data itself
     They can however read, create, modify and delete the records in the database """
 
-    def __init__(self, database_path:str, datamodel_path:str="db/datamodel.ods", verbose:bool=True):
-        super().__init__(verbose)
-        self.database_path = database_path
-        self.data_model = DataModel(datamodel_path)
+    def __init__(self, database_path:Optional[str]="", datamodel_path:Optional[str]="db/datamodel.ods", verbose:bool=True):
+        if not hasattr(self, '__instance'):  # if it does, then a singleton has already been created
+            # in that case, use change_db instead
+            super().__init__(verbose)
+            self.database_path = database_path
+            self.data_model = DataModel(datamodel_path)
     
     def change_db(self, database_path:str, datamodel_path:str="db/datamodel.ods"):
         """ Change which database the handler connects to
@@ -57,18 +45,39 @@ class DataHandler(BaseObject, metaclass=Singleton):
     def get_records(self) -> List[Record]:
         """ Return records from database """
         raise NotImplementedError
-    
-    def add_record(self, record:Record) -> None:
-        """ Add (insert or fail) a new record in the database """
+
+    def get_record(self, table:Table|str, display_name:str) -> Record:
+        """ Return record from database """
         raise NotImplementedError
     
-    def edit_record(self, record:Record) -> None:
-        """ Edit (update or fail) an existing record in the database """
+    def clear_table(self, table:Table) -> None:
+        """ Empty the given table of all records """
+        raise NotImplementedError
+
+    def create_or_update_record(self, record:Record) -> None:
+        """ Add a record in the database, update it if it already exists """
+        raise NotImplementedError
+
+    def create_record_or_fail(self, record:Record) -> None:
+        """ Add a record in the database, fail if it already exists """
+        raise NotImplementedError
+
+    def create_record_or_ignore(self, record:Record) -> None:
+        """ Add a record in the database, pass if it already exists """
         raise NotImplementedError
     
-    def delete_record(self, record:Record) -> None:
-        """ Delete a record in the database """
+    def update_record_or_fail(self, record:Record) -> None:
+        """ Update a record in the database, fail if it doesn't exist """
         raise NotImplementedError
+    
+    def delete_record_or_ignore(self, record:Record) -> None:
+        """ Delete a record in the database, pass if it doesn't exist """
+        raise NotImplementedError
+    
+    def delete_record_or_fail(self, record:Record) -> None:
+        """ Delete a record in the database, fail if it doesn't exist """
+        raise NotImplementedError
+
 
 
 
@@ -76,7 +85,12 @@ class SQLiteHandler(DataHandler):
     """ SQLite database handler """
 
     # There are more data types in our application than in sqlite3
-    type_mapping = {"TEXT": "TEXT", "INTEGER": "INTEGER", "BOOLEAN": "BOOLEAN", "DATE":"DATE", "FILEPATH":"TEXT", "LENGTH":"TEXT"}
+    py_to_sql_type_mapping = {
+        TextField: "TEXT", IntField: "INTEGER",
+        BoolField: "BOOLEAN", DateField: "TEXT",
+        FilepathField: "TEXT", LengthField: "TEXT" 
+
+    }
 
     def __init__(
             self, database_path:str="db/podfics.db", datamodel_path:str="db/datamodel.ods",
@@ -99,7 +113,7 @@ class SQLiteHandler(DataHandler):
         try: self.con.close()
         except AttributeError as e: pass
 
-    def run_query(self, query:str, parameters:List[Any]) -> List[List[Any]]:
+    def _run_query(self, query:str, parameters:List[Any]) -> List[List[Any]]:
         """ Fetch results of the query """
         try:
             res = self.cur.execute(query, parameters)
@@ -114,14 +128,14 @@ class SQLiteHandler(DataHandler):
     
     def debug_schema(self, debug_table="archive_warning") -> None:
         """ Print database schema and one table for debug purposes """
-        schema = self.run_query("""
+        schema = self._run_query("""
             WITH tables AS (SELECT name tableName, sql 
             FROM sqlite_master WHERE type = 'table' AND tableName NOT LIKE 'sqlite_%')
             SELECT fields.name, fields.type, tableName
             FROM tables CROSS JOIN pragma_table_info(tables.tableName) fields""", []).fetchall()
         print("DB schema:", schema)
         try:
-            table_contents = self.run_query(f"SELECT * FROM {debug_table};", []).fetchall()
+            table_contents = self._run_query(f"SELECT * FROM {debug_table};", []).fetchall()
             self._vprint(debug_table+":", table_contents, "\n")
         except OperationalError as e:
             self._vprint(debug_table+":", e)
@@ -131,7 +145,7 @@ class SQLiteHandler(DataHandler):
         """ Create/overwrite database based on model """
         
         def get_field_sql(field:Field) -> str:
-            sql = f"{field.field_name} {SQLiteHandler.type_mapping[field.type]}"
+            sql = f"{field.field_name} {SQLiteHandler.py_to_sql_type_mapping[type(field)]}"
             sql += " NOT NULL" if field.mandatory else ""
             sql += f" DEFAULT {field.default_value}" if field.default_value else ""
             sql += f" REFERENCES {field.foreign_key_table.display_name}(ID)" +\
@@ -165,8 +179,9 @@ class SQLiteHandler(DataHandler):
         self.con.commit()
 
     def export_db_model_to_spreadsheet(self, spreadsheet_path:str="db/database.ods") -> None:
-        """ Overwrite spreadsheet data model with database model """
-        schema = self.run_query("""
+        """ Overwrite spreadsheet data model with database model
+        TODO does not work, and also won't be able to guess date, length, filepath, etc types  """
+        schema = self._run_query("""
             WITH tables AS (SELECT name tableName, sql 
             FROM sqlite_master WHERE type = 'table' AND tableName NOT LIKE 'sqlite_%')
             SELECT tableName, name, type, notnull, dflt_value, pk
@@ -243,10 +258,8 @@ class SQLiteHandler(DataHandler):
 
     
     def get_records(
-            self, table:Table|str,
-            sort_by:Optional[str]=None,
-            where_condition:Optional[str]=None
-            ) -> List[Record]:
+            self, table:Table|str, sort_by:Optional[str]=None,
+            where_condition:Optional[str]=None) -> List[Record]:
         """ Return records from database """
         # If table name was given instead of table object, check it exists and get it
         if type(table) == str:
@@ -263,17 +276,14 @@ class SQLiteHandler(DataHandler):
         if where_condition: data_query += f''' WHERE {where_condition}'''
         if sort_by: data_query += f''' ORDER BY {sort_by}'''
         # Fetch data
-        data = self.run_query(data_query, []).fetchall()
+        data = self._run_query(data_query, []).fetchall()
 
         # Get non-automatic fields
         # headers = list(map(lambda attr : attr[0], self.cur.description))
         records = [Record(table, {h:v for h, v in zip(table.fields, values)}) for values in data]
         return records
     
-    def get_record(
-            self, table:Table|str,
-            display_name:str
-        ) -> Record:
+    def get_record(self, table:Table|str, display_name:str) -> Record:
         """ Return record from database """
         # If table name was given instead of table object, check it exists and get it
         if type(table) == str:
@@ -284,7 +294,7 @@ class SQLiteHandler(DataHandler):
         data_query += f''' FROM {table.table_name}'''
         data_query += f''' WHERE {table.table_name}.display_name = "{display_name}";'''
         # Fetch data
-        data = self.run_query(data_query, []).fetchall()
+        data = self._run_query(data_query, []).fetchall()
         if not data:
             print(f"DEBUG couldn't find record for {display_name} in {table.table_name}")
             raise Exception
@@ -309,7 +319,7 @@ class SQLiteHandler(DataHandler):
         sql += f" VALUES ({', '.join(values)}) ON CONFLICT(display_name) DO UPDATE SET "
         sql += ', '.join(f'{f}="{v}"' for f, v in zip(fields, values) if f!="display_name")
         sql += ";"
-        self.run_query(sql, [])
+        self._run_query(sql, [])
 
     def create_record_or_fail(self, record:Record) -> None:
         """ Add a record in the database, fail if it already exists """
@@ -318,7 +328,7 @@ class SQLiteHandler(DataHandler):
         sql += ") VALUES ("
         sql += ', '.join(f'"{value}"' for value in record.values.values())
         sql += ");"
-        self.run_query(sql, [])
+        self._run_query(sql, [])
 
     def create_record_or_ignore(self, record:Record) -> None:
         """ Add a record in the database, pass if it already exists """
@@ -327,7 +337,7 @@ class SQLiteHandler(DataHandler):
         sql += ") VALUES ("
         sql += ', '.join(f'"{value}"' for value in record.values.values())
         sql += ");"
-        self.run_query(sql, [])
+        self._run_query(sql, [])
     
     def update_record_or_fail(self, record:Record) -> None:
         """ Update a record in the database, fail if it doesn't exist """
@@ -336,14 +346,14 @@ class SQLiteHandler(DataHandler):
         sql = f"UPDATE OR FAIL {record.parent_table.table_name} SET "
         sql += ', '.join([f'{f}={v}' for f, v in zip(fields, values) if f!="display_name"])
         sql += f" WHERE {record.parent_table.table_name}.ID = {record.ID};"
-        self.run_query(sql, [])
-    
-    def delete_record_or_fail(self, record:Record) -> None:
-        """ Delete a record in the database, fail if it doesn't exist """
-        raise NotImplementedError  # TODO
+        self._run_query(sql, [])
     
     def delete_record_or_ignore(self, record:Record) -> None:
         """ Delete a record in the database, pass if it doesn't exist """
+        raise NotImplementedError  # TODO
+    
+    def delete_record_or_fail(self, record:Record) -> None:
+        """ Delete a record in the database, fail if it doesn't exist """
         raise NotImplementedError  # TODO
 
 

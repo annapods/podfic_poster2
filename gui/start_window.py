@@ -1,15 +1,14 @@
 import sys
-
 import gi
+gi.require_version("Gtk", "3.0")
+from gi.repository.Gtk import ApplicationWindow, Grid, Stack, StackSidebar, Label, Application
 
-from gui.base_graphics import get_scroll_window
+
+from gui.base_graphics import ScrollWindow
 from gui.db_management_widget import DBManager
 
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
 
-
-class StartWindow(Gtk.ApplicationWindow):
+class StartWindow(ApplicationWindow):
     """ Main window of the application, navigation level
     Contains a menu to the left that selects the content of the panel to the left
     https://stackoverflow.com/questions/44509994/create-a-simple-tabbed-multi-page-application-with-python-and-gtk """
@@ -26,20 +25,20 @@ class StartWindow(Gtk.ApplicationWindow):
         self.db_handler = None
 
         # Main grid, will only contain right content panel and left navigation sidebar
-        self.main_grid = Gtk.Grid()
+        self.main_grid = Grid()
         # self.main_grid.set_column_homogeneous(False)
         self.add(self.main_grid)
 
         # Right panel for content, will be filled dynamically by the options of the left navifation sidebar
-        right_content = Gtk.Stack()
+        right_content = Stack()
         right_content.set_border_width(10)
         # Scrollable vertically
-        right_scrollable = get_scroll_window()  # Gtk.ScrolledWindow()
+        right_scrollable = ScrollWindow()
         right_scrollable.add(right_content)
         self.main_grid.attach(right_scrollable, 1, 0, 1, 1)  # right, top, width, height
 
         # Left menu for navigation
-        left_menu = Gtk.StackSidebar()
+        left_menu = StackSidebar()
         left_menu.set_stack(right_content)
         self.main_grid.attach(left_menu, 0, 0, 1, 1)
 
@@ -51,11 +50,11 @@ class StartWindow(Gtk.ApplicationWindow):
         # right_content.add_titled(content, "label_1_name", "menu title")
 
         # Project main view, for later
-        placeholder = Gtk.Label(label="TODO")
+        placeholder = Label(label="TODO")
         right_content.add_titled(placeholder, "projects", "Projects")
 
         # Application parameters, for later
-        placeholder = Gtk.Label(label="TODO")
+        placeholder = Label(label="TODO")
         right_content.add_titled(placeholder, "settings", "Settings")
 
         self.show_all()
@@ -63,7 +62,7 @@ class StartWindow(Gtk.ApplicationWindow):
 
 
 
-class PodficApplication(Gtk.Application):
+class PodficApplication(Application):
     """ Application, highest level """
     
     def __init__(self, *args, **kwargs):
@@ -76,7 +75,7 @@ class PodficApplication(Gtk.Application):
 
 
     def do_startup(self):
-        Gtk.Application.do_startup(self)
+        Application.do_startup(self)
 
     def do_activate(self):
         # We only allow a single window and raise any existing ones
