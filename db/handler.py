@@ -313,48 +313,55 @@ class SQLiteHandler(DataHandler):
 
     def create_or_update_record(self, record:Record) -> None:
         """ Add a record in the database, update it if it already exists """
-        fields = [field.field_name for field in record.values]
-        values = [f'"{value}"' for value in record.values.values()]
-        sql = f"INSERT INTO {record.parent_table.table_name} ({', '.join(fields)})"
+        fields = [field for field in record.values if not field.automatic]
+        values = [f'"{record.values[field]}"' for field in fields]
+        field_names = [field.field_name for field in fields]
+        sql = f"INSERT INTO {record.parent_table.table_name} ({', '.join(field_names)})"
         sql += f" VALUES ({', '.join(values)}) ON CONFLICT(display_name) DO UPDATE SET "
-        sql += ', '.join(f'{f}="{v}"' for f, v in zip(fields, values) if f!="display_name")
+        sql += ', '.join(f'{field}={value}' for field, value in zip(field_names, values))
         sql += ";"
         self._run_query(sql, [])
 
     def create_record_or_fail(self, record:Record) -> None:
         """ Add a record in the database, fail if it already exists """
-        sql = f"INSERT OR FAIL INTO {record.parent_table.table_name} ("
-        sql += ', '.join([field.field_name for field in record.values])
-        sql += ") VALUES ("
-        sql += ', '.join(f'"{value}"' for value in record.values.values())
-        sql += ");"
+        fields = [field for field in record.values if not field.automatic]
+        values = [f'"{record.values[field]}"' for field in fields]
+        field_names = [field.field_name for field in fields]
+        sql = f"INSERT OR FAIL INTO {record.parent_table.table_name} "
+        sql += f"({', '.join(field_names)}) VALUES ({', '.join(values)});"
         self._run_query(sql, [])
 
     def create_record_or_ignore(self, record:Record) -> None:
         """ Add a record in the database, pass if it already exists """
-        sql = f"INSERT OR IGNORE INTO {record.parent_table.table_name} ("
-        sql += ', '.join([field.field_name for field in record.values])
-        sql += ") VALUES ("
-        sql += ', '.join(f'"{value}"' for value in record.values.values())
-        sql += ");"
+        fields = [field for field in record.values if not field.automatic]
+        values = [f'"{record.values[field]}"' for field in fields]
+        field_names = [field.field_name for field in fields]
+        sql = f"INSERT OR IGNORE INTO {record.parent_table.table_name} "
+        sql += f"({', '.join(field_names)}) VALUES ({', '.join(values)});"
         self._run_query(sql, [])
     
     def update_record_or_fail(self, record:Record) -> None:
         """ Update a record in the database, fail if it doesn't exist """
-        fields = [field.field_name for field in record.values]
-        values = [f'"{value}"' for value in record.values.values()]
+        fields = [field for field in record.values if not field.automatic]
+        values = [f'"{record.values[field]}"' for field in fields]
+        field_names = [field.field_name for field in fields]
         sql = f"UPDATE OR FAIL {record.parent_table.table_name} SET "
-        sql += ', '.join([f'{f}={v}' for f, v in zip(fields, values) if f!="display_name"])
-        sql += f" WHERE {record.parent_table.table_name}.ID = {record.ID};"
+        sql += ', '.join([f'{f}={v}' for f, v in zip(field_names, values)])
+        sql += f" WHERE ID = {record.ID};"
         self._run_query(sql, [])
     
     def delete_record_or_ignore(self, record:Record) -> None:
         """ Delete a record in the database, pass if it doesn't exist """
-        raise NotImplementedError  # TODO
-    
+        sql = f'DELETE FROM {record.parent_table.table_name} '
+        sql += f'WHERE ID = {record.ID}'
+        self._run_query(sql, [])
+
     def delete_record_or_fail(self, record:Record) -> None:
         """ Delete a record in the database, fail if it doesn't exist """
-        raise NotImplementedError  # TODO
+        sql = f'SELECT EXISTS(SELECT 1 FROM {record.parent_table.table_name} WHERE ID = {record.ID});'
+        result = self._run_query(sql, [])
+        assert result, f"tried to delete {record} in delete_or_fail mode but it doesn't exist"
+        self.delete_record_or_ignore(record)
 
 
 if __name__ == "__main__":

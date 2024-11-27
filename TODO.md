@@ -25,25 +25,27 @@
 [ ] Database Manager
     [x] pick database
     [x] pick table
-        [ ] column order
+        [ ] column order?
     [x] pick record
     [x] reload dynamically
     [ ] show record
         [x] text
         [x] boolean
-        [ ] int
-            [ ] doesn't show values not 0
+        [x] int
         [x] ext no options
-        [ ] ext radio buttons
-            [ ] default or lack thereof
+        [x] ext radio buttons
         [ ] ext dropdown
         [?] ext table
+        [ ] ext add new record to foreign table
+            [ ] popup?
+            [ ] default value on one side of the rel)
         [ ] filepath
         [ ] length
         [ ] date
-    [ ] save record (create)
-    [~] save record (edit)
+    [x] save record (create)
+    [x] save record (edit)
     [ ] delete record
+        [x] sql handler functions
         [ ] if edit, popup
         [ ] if new, cancel
     [ ] cancel
@@ -64,6 +66,10 @@
     [ ] select project to work on
         [ ] how to select a step/action?
         [ ] process definition
+            [ ] setup
+            [ ] post
+            [ ] promo
+            [ ] archive
     [ ] automatic steps
         [ ] files discovery
         [ ] html extraction and auto-fill
@@ -74,6 +80,7 @@
     [ ] database
     [ ] me person?
 
-## Workflow
+## Basics
 
 [ ] separate GUI and workflow?
+[ ] model view whatever

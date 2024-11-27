@@ -13,7 +13,6 @@ from src.base_object import BaseObject
 
 def display_name_concat(to_concat:List[str]) -> str:
     """ Concatenate display name parts """
-    print("DEBUG", " - ".join(to_concat))
     return " - ".join(to_concat)
 
 
@@ -42,8 +41,9 @@ class Field(BaseDataObject):
             self, parent_table:BaseDataObject, field_name:str,
             foreign_key_table:Optional[BaseDataObject]=None,
             part_of_display_name:Optional[bool]=False, mandatory:Optional[bool]=False,
-            editable:Optional[bool]=True, default_value:Optional[str]="",
-            display_order:Optional[int]=1000000, verbose:Optional[bool]=True):
+            editable:Optional[bool]=True, automatic:Optional[bool]=False,
+            default_value:Optional[str]="", display_order:Optional[int]=1000000,
+            verbose:Optional[bool]=True):
         """ NOTE parent_table and foreign_key_table are Table objects
         Order of declaration in the file doesn't allow for more specific type hinting """
         display_name = display_name_concat([parent_table.table_name, field_name])
@@ -54,6 +54,7 @@ class Field(BaseDataObject):
         self.part_of_display_name = part_of_display_name
         self.mandatory = mandatory
         self.editable = editable
+        self.automatic = automatic
         self.default_value = default_value
         self.display_order = display_order
 
@@ -72,32 +73,32 @@ class IntField(Field):
         if type(value) is not int: return False
         if self.mandatory and value is None: return False
         return True
-    
+
 class TextField(Field):
     def validate(self, value:Any) -> bool:
         if (type(value)) is not str: return False
         if self.mandatory and value == "": return False
         return True
-    
+
 class BoolField(Field):
     def validate(self, value:Any) -> bool:
         if (type(value)) is not bool: return False
         return True
-    
+
 class DateField(Field):
     def validate(self, value:Any) -> bool:
         if (type(value)) is not str: return False
         if self.mandatory and value == "": return False
         # TODO format checks
         return True
-    
+
 class FilepathField(Field):
     def validate(self, value:Any) -> bool:
         if (type(value)) is not str: return False
         if self.mandatory and value == "": return False
         # TODO format checks
         return True
-    
+
 class LengthField(Field):
     def validate(self, value:Any) -> bool:
         if (type(value)) is not str: return False
@@ -177,6 +178,9 @@ class Record(BaseDataObject):
     def __repr__(self) -> str:
         return f"{self.parent_table}: {self}"
     
+    def __str__(self) -> str:
+        return self.display_name
+    
     def save_to_db(self, new:bool=False):
         from db.handler import SQLiteHandler
         if new:
@@ -198,10 +202,8 @@ class DataModel(BaseObject):
         self.spreadsheet_path = spreadsheet_path
         self.load_db_model_from_spreadsheet()
     
-
     def load_db_model_from_spreadsheet(self) -> None:
         """ Load tables and fields based on spreadsheet """
-
         # Load model in dataframes
         excel_file = ExcelFile(self.spreadsheet_path)
         data_table_df = clean_df(excel_file.parse("data_table"))
@@ -212,11 +214,11 @@ class DataModel(BaseObject):
             Table(table_name, sort_rows_by=sort_rows_by) for table_name, sort_rows_by \
             in zip(data_table_df["table_name"], data_table_df["sort_rows_by"])]
         # NOTE sort_rows_by is supposed to be a Field object but is a string for now
-        
+
         field_info = [
             "field_name", "foreign_key_table", "part_of_display_name", "mandatory",
             "editable", "default_value", "display_order"]
-        
+
         # Load fields in tables in model
         for table in self.tables:
             table.fields = []
@@ -224,9 +226,10 @@ class DataModel(BaseObject):
             table_field_df = data_field_df[data_field_df["table_name"] == table.table_name]
             types = table_field_df["type"]
             infos = zip(*[table_field_df[column] for column in field_info])
-            table.fields = [spreadsheet_to_py_type_mapping[type](table, *info_list) for type, info_list in zip(types, infos)]
+            table.fields = [spreadsheet_to_py_type_mapping[type](table, \
+                **dict(zip(field_info, infos))) for type, infos in zip(types, infos)]
         # NOTE foreign_key_table is supposed to be a Table object but is a string for now
-            
+
         # Add ID, display_name and creation_date fields to tables
         for table in self.tables:
             table.fields = [
@@ -237,15 +240,14 @@ class DataModel(BaseObject):
                 ] + table.fields + [
                     DateField(table, "creation_date", mandatory=True, editable=False)
                 ]
-            
+
         # Crosslink sort_rows_by and foreign_key_table with the actual objects
         for table in self.tables:
             table.sort_rows_by = table.get_field(table.sort_rows_by) if table.sort_rows_by else None
             for field in table.fields:
                 field.foreign_key_table = self.get_table(field.foreign_key_table) \
                     if field.foreign_key_table else None
-
-    
+            
     def get_table(self, table_name:str) -> Table:
         """ Fetch table based on table name """
         found_tables = [table for table in self.tables if table.table_name==table_name]

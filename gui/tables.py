@@ -19,10 +19,15 @@ py_to_gtk_type_mapping = {
 class TableGrid(PaddedGrid):
     """ Table that can show data from records
     Columns can be set at init or be calculated dynamically from the records given
-    Selection is implemented at subclass level """
+    Selection is implemented at subclass level
+    External interface:
+    - current_selection  # TODO type to define
+    - reload_table
+    - set_selection
+    calls on_change_notify when the selection changes """
 
     def __init__(
-            self, label:str, do_after_select:Callable,
+            self, label:str, on_change_notify:Callable,
             set_fields:Optional[List[Field]]=[], include_technical_columns:Optional[bool]=False,
             *args, **kwargs):
         """ To dynamically refresh columns based on records, leave set_fields out """
@@ -47,11 +52,11 @@ class TableGrid(PaddedGrid):
         
         def _on_selection_changed(selection:TreeSelection):
             self._fetch_current(selection)
-            do_after_select()
+            on_change_notify()
         
         self._tree_selection.connect("changed", _on_selection_changed)
 
-
+        # TODO outside of this class?
         # Put the treeview in a scrollwindow
         self._widget = ScrollWindow()
         self._widget.add(self._treeview)

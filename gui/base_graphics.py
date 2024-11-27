@@ -20,6 +20,7 @@ class PaddedGrid(Grid, BaseObject):
         super().__init__(*args, **kwargs)
         # self._verbose = True  # DEBUG need to check why I need to declare it here...
         self.set_row_spacing(5)
+        self.set_column_spacing(5)
         self.set_border_width(5)
         self.set_column_homogeneous(True)
         self.set_row_homogeneous(False)

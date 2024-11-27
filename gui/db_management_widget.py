@@ -10,13 +10,17 @@ from gui.tables import MultiSelectTable, SingleSelectTable
 
 
 class DBManager(PaddedGrid):
-
+    """ Database manager widget, contains tables for table and record selection and a form to edit
+    or create records
+    Code interface:
+    - 
+    """
     def __init__(self):
         super().__init__()
 
         # Current selections and helpers
         self.database_path = ""
-        self.db_handler = None
+        self._db_handler = None
         self.current_table = None
         self.current_fields = []  # Obsolete, was intended to filter the columns to show in records table
         self.current_record = None
@@ -29,7 +33,7 @@ class DBManager(PaddedGrid):
 
         # Reload database button
         reload_button = Gtk.Button(label="Reload")
-        reload_button.connect("clicked", self.on_button_reload_clicked)
+        reload_button.connect("clicked", self._on_button_reload_clicked)
         reload_button.vexpand = False
 
         # Database picker and button in a single frame
@@ -47,7 +51,7 @@ class DBManager(PaddedGrid):
         self.attach_next(self._records_table)
 
         # Record form
-        self._record_grid = RecordManager()
+        self._record_grid = RecordManager(on_change_notify=self._on_record_modified)
         record_frame = PaddedFrame(label="Record form")
         # swap default grid for RecordManager
         record_frame.remove(record_frame.grid)
@@ -59,36 +63,36 @@ class DBManager(PaddedGrid):
 
     def _reload_db(self) -> None:
         """ """
-        self.db_handler = SQLiteHandler(self.database_path)
-        self.db_handler.change_db(self.database_path)
-        self._record_grid.db_handler = self.db_handler
+        self._db_handler = SQLiteHandler(self.database_path)
+        self._db_handler.change_db(self.database_path)
+        self._record_grid.db_handler = self._db_handler
         self._reload_tables_table()
 
     def _reload_tables_table(self) -> None:
-        """ Reload the tables table
+        """ Reload the tables table, reload in cascade the elements that depend on that table
         This table shows the data_table records """
-        records = self.db_handler.get_records(table="data_table")
+        records = self._db_handler.get_records(table="data_table")
         self._tables_table.reload_table(records)
         self.current_fields = None
         self._reload_fields_table()
         self._reload_records_table()
     
     def _reload_fields_table(self) -> None:
-        """ Reload the fields table for the current table selected, if any
+        """ Reload the fields table for the current table selected, if any, reload in cascade the elements that depend on that table (none currently)
         This table shows the data_field records with a filter on the data_table if applicable"""
-        records = self.db_handler.get_records(
+        records = self._db_handler.get_records(
             table="data_field",
             where_condition=f'''table_name="{self.current_table.table_name}"''' if self.current_table else ""
         )
         self._fields_table.reload_table(records)
 
     def _reload_records_table(self) -> None:
-        """ Reload the records table
+        """ Reload the records table, reload in cascade the elements that depend on that table
         This table shows the records of the selected table, if any
         If no table has been selected, or if the table is empty, nothing will be shown, not even column headers """
         if self.current_table:
             records = \
-                self.db_handler.get_records(
+                self._db_handler.get_records(
                     table=self.current_table, sort_by=None
             )
         else:
@@ -99,13 +103,16 @@ class DBManager(PaddedGrid):
 
 
     def _reload_record_form(self) -> None:
-        """ """
+        """ Reload the record form
+        If a table and a record are selected, this form shows the fields and values of the record
+        If only a table, the fields are empty
+        If no table, nothing """
         if self.current_record and self.current_table:
-            self._record_grid.init_form_from_record(self.current_record)
+            self._record_grid.reset_form_from_record(self.current_record)
         elif self.current_table:
-            self._record_grid.init_form_from_table(self.current_table)
+            self._record_grid.reset_form_from_table(self.current_table)
         else:
-            self._record_grid.init_form_from_nothing()
+            self._record_grid.reset_form_from_nothing()
             
 
     def _on_file_picked(self, file_chooser_button):
@@ -120,7 +127,7 @@ class DBManager(PaddedGrid):
     def _on_table_selection_changed(self) -> None:
         """ Callback for table selection """
         if self._tables_table.current_selection:
-            self.current_table = self.db_handler.data_model.get_table(self._tables_table.current_selection)
+            self.current_table = self._db_handler.data_model.get_table(self._tables_table.current_selection)
         self.current_fields = []
         self._reload_fields_table()
         self.current_record = None
@@ -135,12 +142,19 @@ class DBManager(PaddedGrid):
         """ Callback for record selection """
         current_record_id = self._records_table.current_selection
         if current_record_id and self.current_table:
-            self.current_record = self.db_handler.get_record(table=self.current_table, display_name=current_record_id)
+            self.current_record = self._db_handler.get_record(table=self.current_table, display_name=current_record_id)
         else: self.current_record = None
         self._reload_record_form()
         
 
-
-    def on_button_reload_clicked(self, button:Button) -> None:
-        """ """
+    def _on_button_reload_clicked(self, button:Button) -> None:
+        """ Callback for database reload button """
         self._reload_db()
+
+    def _on_record_modified(self) -> None:
+        """ Callback for the record manager widget that can edit, create and delete records """
+        # The assumption is that the user won't edit the data_table and data_field db tables
+        # There is no safegard/failsafe, but come one
+        self.current_record = None
+        self._reload_records_table()
+
