@@ -3,6 +3,7 @@ A DataModel object, instanciated from an excel datamodel file, contains Table ob
 which contain Field objects
 Records are not saved in the DataModel or Table objects but have a link back to their parent Table """
 
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 from numpy import nan
 from pandas import DataFrame, ExcelFile
@@ -29,14 +30,25 @@ class BaseDataObject(BaseObject):
     def __init__(self, display_name:str, verbose:Optional[bool]=True) -> None:
         super().__init__(verbose)
         self.display_name = display_name
+
     def __str__(self) -> str:
-        return self.display_name.replace("_"," ")
+        return self.display_name  # .replace("_"," ")
     def __repr__(self) -> str:
         return f"{type(self).__name__.lower()}: {self.display_name.replace('_',' ')}"
+    
+    def __hash__(self):
+        # Quite weak hashing, will end up with any object of same class and same display name is any other
+        # Will need to add __hash__ = BaseObject.__hash__ to any subclass that overrides __eq__
+        return hash((type(self).__name__, self.display_name))
+    def __eq__(self, other):
+        # To override in children classes if needed
+        return type(other) is type(self) and self.display_name == other.display_name
 
 
 class Field(BaseDataObject):
     """ Field in a Table """
+    __hash__ = BaseObject.__hash__
+
     def __init__(
             self, parent_table:BaseDataObject, field_name:str,
             foreign_key_table:Optional[BaseDataObject]=None,
@@ -59,14 +71,21 @@ class Field(BaseDataObject):
         self.display_order = display_order
 
     def __str__(self) -> str:
-        return self.display_name.replace("_"," ")
-    
+        return self.field_name
     def __repr__(self) -> str:
-        return f"Field in {self.parent_table}: {self}"
+        return f"{self.parent_table}.{self.field_name}"
+
+    def __eq__(self, other) -> bool:
+        if not type(other) is type(self): return False
+        if self.field_name != other.field_name: return False
+        if not self.parent_table is other.parent_table: return False
+        return True
     
     def validate(self, value:Any) -> bool:
         """ Validate the value in type/format and mandatory/not """
         raise NotImplementedError
+    
+
 
 class IntField(Field):
     def validate(self, value:Any) -> bool:
@@ -122,6 +141,8 @@ spreadsheet_to_py_type_mapping = {
 
 class Table(BaseDataObject):
     """ Table in a DataModel, contains Fields """
+    __hash__ = BaseObject.__hash__
+    
     def __init__(
             self, table_name:str, fields:Optional[List[Field]] = [],
             sort_rows_by:Optional[Field]=None, verbose:Optional[bool]=True):
@@ -129,6 +150,7 @@ class Table(BaseDataObject):
         self.table_name = table_name
         self.sort_rows_by = sort_rows_by
         self.fields = fields
+
 
     def get_field(self, field_name:str) -> Field:
         """ Fetch one field based on field name """
@@ -144,11 +166,21 @@ class Table(BaseDataObject):
         fields = [self.get_field(field_name) for field_name in field_names]
         return fields
     
+    def __eq__(self, other) -> bool:
+        if not type(other) is type(self): return False
+        if not self.table_name == other.table_name: return False
+        if not len(self.fields) == len(other.fields): return False
+        for f in self.fields:
+            if not f in other.fields:
+                return False
+        return True
+    
 
 class Record(BaseDataObject):
     """ Record in a table
     Records are not loaded in the DataModel or the Table
     ID and display_name can be empty if the record doesn't exist in the database yet """
+    __hash__ = BaseObject.__hash__
     def __init__(
             self, parent_table:Table,
             values:Dict[Field, Any],
@@ -176,10 +208,23 @@ class Record(BaseDataObject):
         self.recalculate_display_name()
     
     def __repr__(self) -> str:
-        return f"{self.parent_table}: {self}"
+        return f"({self.parent_table}) {self}"
     
     def __str__(self) -> str:
         return self.display_name
+    
+    def __hash__(self):
+        return hash((hash(type(self).__name__), self.ID, hash(self.display_name)))
+    
+    def __eq__(self, other):
+        if not type(other) is type(self): return False
+        if not self.parent_table == other.parent_table: return False
+        if not len(self.values) == len(other.values): return False
+        for f in self.parent_table.fields:
+            if self.values[f] != other.values[f]:
+                return False
+        return True
+
     
     def save_to_db(self, new:bool=False):
         from db.handler import SQLiteHandler
@@ -234,11 +279,12 @@ class DataModel(BaseObject):
         for table in self.tables:
             table.fields = [
                     IntField(table, "ID", mandatory=False, editable=False,
-                        display_order=-2),
+                        automatic=True, display_order=-2),
                     TextField(table, "display_name", mandatory=True, editable=False,
-                        display_order=-1),
+                        automatic=True, display_order=-1),
                 ] + table.fields + [
-                    DateField(table, "creation_date", mandatory=True, editable=False)
+                    DateField(table, "creation_date", mandatory=True, editable=False,
+                        automatic=True, )
                 ]
 
         # Crosslink sort_rows_by and foreign_key_table with the actual objects

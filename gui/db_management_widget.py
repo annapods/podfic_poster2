@@ -4,9 +4,10 @@ from gi.overrides.Gtk import Button
 
 
 from db.handler import SQLiteHandler
+from db.objects import Record, Table
 from gui.forms import RecordManager
-from gui.base_graphics import PaddedFrame, PaddedGrid
-from gui.tables import MultiSelectTable, SingleSelectTable
+from gui.base_graphics import PaddedFrame, PaddedGrid, ScrollWindow
+from gui.tables import MultiSelectTable, SingleSelectTable, TableWidget
 
 
 class DBManager(PaddedGrid):
@@ -15,6 +16,7 @@ class DBManager(PaddedGrid):
     Code interface:
     - 
     """
+
     def __init__(self):
         super().__init__()
 
@@ -24,6 +26,7 @@ class DBManager(PaddedGrid):
         self.current_table = None
         self.current_fields = []  # Obsolete, was intended to filter the columns to show in records table
         self.current_record = None
+
         
         # Database picker
         db_picker = Gtk.FileChooserButton(
@@ -43,12 +46,18 @@ class DBManager(PaddedGrid):
         self.attach_next(database_frame)
 
         # Tables
-        self._tables_table = SingleSelectTable("Tables", self._on_table_selection_changed)
-        self.attach_next(self._tables_table)
-        self._fields_table = MultiSelectTable("Table fields", self._on_fields_selection_changed)
-        self.attach_next(self._fields_table)
-        self._records_table = SingleSelectTable("Table records", self._on_records_selection_changed)
-        self.attach_next(self._records_table)
+        def frame_table(table:TableWidget, label:str) -> PaddedFrame:
+            # TODO outside of this class?
+            frame = PaddedFrame(label=label)
+            frame.grid.attach_next(table)
+            return frame
+
+        self._tables_table = SingleSelectTable(self._on_table_selection_changed)
+        self.attach_next(frame_table(self._tables_table, "Tables"))
+        self._fields_table = MultiSelectTable(self._on_fields_selection_changed)
+        self.attach_next(frame_table(self._fields_table, "Table fields"))
+        self._records_table = SingleSelectTable(self._on_records_selection_changed)
+        self.attach_next(frame_table(self._records_table, "Table records"))
 
         # Record form
         self._record_grid = RecordManager(on_change_notify=self._on_record_modified)
@@ -66,7 +75,15 @@ class DBManager(PaddedGrid):
         self._db_handler = SQLiteHandler(self.database_path)
         self._db_handler.change_db(self.database_path)
         self._record_grid.db_handler = self._db_handler
-        self._reload_tables_table()
+        self._reload_tables_table()        
+        # A few data model stuff that doesn't need to be calculated every time
+        self._data_table_table = self._db_handler.data_model.get_table("data_table")
+        self._table_name_field = self._data_table_table.get_field("table_name")
+    
+    def _get_table_from_table_record(self, table_record:Record) -> Table:
+        table_name = table_record.values[self._table_name_field]
+        table = self._db_handler.data_model.get_table(table_name)
+        return table
 
     def _reload_tables_table(self) -> None:
         """ Reload the tables table, reload in cascade the elements that depend on that table
@@ -127,7 +144,7 @@ class DBManager(PaddedGrid):
     def _on_table_selection_changed(self) -> None:
         """ Callback for table selection """
         if self._tables_table.current_selection:
-            self.current_table = self._db_handler.data_model.get_table(self._tables_table.current_selection)
+            self.current_table = self._get_table_from_table_record(self._tables_table.current_selection)
         self.current_fields = []
         self._reload_fields_table()
         self.current_record = None
@@ -140,12 +157,8 @@ class DBManager(PaddedGrid):
     
     def _on_records_selection_changed(self) -> None:
         """ Callback for record selection """
-        current_record_id = self._records_table.current_selection
-        if current_record_id and self.current_table:
-            self.current_record = self._db_handler.get_record(table=self.current_table, display_name=current_record_id)
-        else: self.current_record = None
+        self.current_record = self._records_table.current_selection
         self._reload_record_form()
-        
 
     def _on_button_reload_clicked(self, button:Button) -> None:
         """ Callback for database reload button """
@@ -155,6 +168,9 @@ class DBManager(PaddedGrid):
         """ Callback for the record manager widget that can edit, create and delete records """
         # The assumption is that the user won't edit the data_table and data_field db tables
         # There is no safegard/failsafe, but come one
-        self.current_record = None
+        old_record = self.current_record
         self._reload_records_table()
+        if old_record:
+            self._records_table.set_selected(old_record)
+
 

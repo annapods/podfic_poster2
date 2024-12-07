@@ -18,7 +18,7 @@ class PaddedFrame(Frame):
 class PaddedGrid(Grid, BaseObject):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # self._verbose = True  # DEBUG need to check why I need to declare it here...
+        self._verbose = True  # DEBUG need to check why I need to declare it here...
         self.set_row_spacing(5)
         self.set_column_spacing(5)
         self.set_border_width(5)

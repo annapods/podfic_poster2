@@ -2,7 +2,7 @@ from typing import Any, Callable, List, Optional
 from gi.repository.Gtk import ListStore, TreeView, TreeSelection, PositionType, CellRendererText, TreeViewColumn, SelectionMode
 
 
-from db.objects import Field, Record, TextField, IntField, BoolField, DateField, FilepathField, LengthField
+from db.objects import Field, Record, Table, TextField, IntField, BoolField, DateField, FilepathField, LengthField
 from gui.base_graphics import PaddedFrame, PaddedGrid, ScrollWindow
 
 
@@ -16,7 +16,10 @@ py_to_gtk_type_mapping = {
 }
 
 
-class TableGrid(PaddedGrid):
+
+
+
+class TableWidget(PaddedGrid):
     """ Table that can show data from records
     Columns can be set at init or be calculated dynamically from the records given
     Selection is implemented at subclass level
@@ -27,70 +30,61 @@ class TableGrid(PaddedGrid):
     calls on_change_notify when the selection changes """
 
     def __init__(
-            self, label:str, on_change_notify:Callable,
-            set_fields:Optional[List[Field]]=[], include_technical_columns:Optional[bool]=False,
+            self, on_change_notify:Callable,
+            set_fields:Optional[List[Field]]=[],
             *args, **kwargs):
-        """ To dynamically refresh columns based on records, leave set_fields out """
+        """ To dynamically refresh columns based on records, leave fields out """
 
         super().__init__(*args, **kwargs)
         self._set_fields = set_fields != []
-        self._include_technical_columns = include_technical_columns
-        self._column_names = []
-        self._column_types = []
-        self._recalculate_columns(set_fields)
         self.current_selection = None
+        self._records = []
 
-        # ListStore model
-        self._datastore = ListStore(*self._column_types)
-        # Treeview, making it use the filter as a model, and adding the columns
+        # Fields and columns
         self._treeview = TreeView()
-        self._reset_treeview()
+        self._reset_fields(set_fields)
 
         # Selection method and to do on select
         self._tree_selection = self._treeview.get_selection()
         self._set_selection_mode()
         
-        def _on_selection_changed(selection:TreeSelection):
+        def _on_selection_changed(selection:TreeSelection):  # TODO DEBUG curently,
+            # fetches the first column value, but should be made to return the nth record
+            # make sure that self._records are sorted the same as the data shown to the user
+            # make sure that the fetching works for single and multiple selection
+            # fetch the indexes of the selections
+            # fetch and return the corresponding records
             self._fetch_current(selection)
             on_change_notify()
         
         self._tree_selection.connect("changed", _on_selection_changed)
 
-        # TODO outside of this class?
-        # Put the treeview in a scrollwindow
         self._widget = ScrollWindow()
         self._widget.add(self._treeview)
-        # And the scrollwindow in a frame
-        self._frame = PaddedFrame(label=label)
-        self._frame.grid.attach_next(self._widget)
-        self.attach_next(self._frame, PositionType.BOTTOM)
+        self.attach_next(self._widget, PositionType.BOTTOM)
 
-    def _set_selection_mode(self):
-        raise NotImplementedError
-    
-    def _fetch_current(self, selection:TreeSelection):
-        raise NotImplementedError
+    def _reset_fields(self, fields):
+        """ Reset the columns/fields of the table """
+        self._fields = fields
+        self._table = None if fields == [] else fields[0].parent_table
 
-    
-    def _reset_datastore(self, data:List[Optional[List[Any]]]):
-        """ Reset the table data """
-        self._datastore.clear()
-        for line in data:
-            try:
-                if line: self._datastore.append(list(line))
-            except Exception as e:
-                self._vprint(f"DEBUG couldn't add line to table {line}")
-                raise e
-
-    def _reset_treeview(self):
-        """ Reset the table columns """
-        # Model
+        # Double check fields, sort, add ID at the start if needed
+        if self._fields != []:
+            for f in self._fields: assert f.parent_table == self._table
+            self._fields.sort(key=lambda f: f.display_order)
+            id_field = self._table.get_field("ID")
+            if self._fields[0] != id_field:
+                self._fields.remove(id_field)
+                self._fields = [id_field]+self._fields
+        
+        # Reset datastore
+        self._datastore = ListStore(*[py_to_gtk_type_mapping[type(f)] for f in self._fields])
+        # Reset treeview model and columns
         self._treeview.set_model(self._datastore)
-        # Remove columns
         for column_name in self._treeview.get_columns():
             self._treeview.remove_column(column_name)
         # Reformat, underscores get skipped otherwise
-        columns = [c.replace("_", " ").upper() for c in self._column_names]
+        columns = [f.field_name.replace("_", " ").upper() for f in self._fields]
         # (Re)add columns
         for i, column_name in enumerate(columns):
             renderer = CellRendererText()
@@ -99,69 +93,80 @@ class TableGrid(PaddedGrid):
             column.set_resizable(True)
             self._treeview.append_column(column)
 
-    def _recalculate_columns(self, fields:Optional[List[Field]]=[]):
-        """ Recalculate column names and types based on given fields and init display parameters """
-        self._column_names = []
-        self._column_types = []
-        for field in fields:
-            if self._include_technical_columns or field.field_name not in ["display_name", "ID", "creation_date"]:
-                self._column_names.append(field.field_name)
-                self._column_types.append(py_to_gtk_type_mapping[type(field)])
+    def _set_selection_mode(self):
+        raise NotImplementedError
+    
+    def _fetch_current(self, selection:TreeSelection):
+        raise NotImplementedError
+
+    def _find_record_by_ID(self, to_find:int) -> Record|None:
+        if self._records:
+            for record in self._records:
+                if record.ID == to_find:
+                    return record
+        self._vprint("DEBUG", f"Record ID {to_find} cannot be found here.")
+        return None
+
+    def _find_row_number_by_ID(self, to_find) -> Record|None:
+        i = None
+        if self._records:
+            for i, record in enumerate(self._records):
+                if record.ID == to_find:
+                    return i
+        self._vprint("DEBUG", f"Record ID {to_find} cannot be found here.")
+        return None
 
     def reload_table(self, records:Optional[List[Record]]) -> None:
         """ Reload the table with the given records
         Warning, might not display columns if there is no record and no set columns were specified for this table """
 
-        data = []
-        
         if records:
-            # Double check that all records are in the same table
-            parent_table = records[0].parent_table
-            for r in records:
-                assert r.parent_table == parent_table
-
             # If no set columns at init, recalculate them based on given records
-            if not self._set_fields:
-                self._recalculate_columns(records[0].parent_table.fields)
-
-            # Get values
-            for record in records:
-                # Note: value keys are Field objects, not their str field_names
-                record_data = [record.values[f] for f in record.values.keys() if f.field_name in self._column_names]
-                if self._include_technical_columns: record_data = [record.ID, record.display_name] + record_data
-                data.append(record_data)
+            # The data table is also dynamic in that case
+            if not self._set_fields: self._reset_fields(records[0].parent_table.fields)
+            # Double check that all records are in the same table
+            for r in records: assert r.parent_table == self._table
+            # Sort records
+            records.sort(key=lambda r: r.values[self._table.sort_rows_by])
+            self._records = records
         
-        # Reinitiate table with new columns (if applicable) and data
-        if not self._set_fields: self._datastore = ListStore(*self._column_types)
-        try:
-            self._reset_datastore(data)
-        except Exception as e:
-            self._vprint(f"DEBUG table {records[0].parent_table.table_name}")
-            self._vprint(f"DEBUG columns {self._column_names}")
-        self._reset_treeview()
+        self._datastore.clear()
+        for record in records:
+            try:
+                self._datastore.append([record.values[f] for f in self._fields])
+            except Exception as e:
+                self._vprint(f"DEBUG couldn't add record to table widget...\nTable:{self._table}\nFields:{self._fields}\nRecord: {record}")
+                raise e
 
-    def set_selected(self, to_select):
-        if to_select is None: self._treeview.get_selection().unselect_all()
-        else: self._treeview.set_cursor(to_select)  # DEBUG haven't tested this part
+    def set_selected(self, to_select:Record|int) -> None:
+        if to_select is None:
+            self._treeview.get_selection().unselect_all()
+            return
+        elif type(to_select) is Record:
+            to_select = to_select.ID
+        row_number = self._find_row_number_by_ID(to_select)
+        if row_number:
+            self._treeview.set_cursor(self._find_row_number_by_ID(to_select))
 
 
-class SingleSelectTable(TableGrid):
+class SingleSelectTable(TableWidget):
     def _set_selection_mode(self):
         self._tree_selection.set_mode(SelectionMode.SINGLE)
     def _fetch_current(self, selection):
         (model, pathlist) = selection.get_selected_rows()
         self.current_selection = None
         for path in pathlist:
-            tree_iter = model.get_iter(path)
-            self.current_selection = model.get_value(tree_iter, 0)
+            record_id =  model.get_value(model.get_iter(path), 0)
+            self.current_selection = self._find_record_by_ID(record_id)
+        print("DEBUG 2", self.current_selection)
 
-class MultiSelectTable(TableGrid):
+class MultiSelectTable(TableWidget):
     def _set_selection_mode(self):
         self._tree_selection.set_mode(SelectionMode.MULTIPLE)
     def _fetch_current(self, selection):
         (model, pathlist) = selection.get_selected_rows()
         self.current_selection = []
-        for path in pathlist :
-            tree_iter = model.get_iter(path)
-            current_id = model.get_value(tree_iter, 1)
-            self.current_selection.append(current_id)
+        for path in pathlist:
+            record_id =  model.get_value(model.get_iter(path), 0)
+            self.current_selection.append(self._find_record_by_ID(record_id))
+        print("DEBUG 3", self.current_selection)

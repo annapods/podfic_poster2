@@ -20,7 +20,7 @@ class BaseObject:
     def _vprint(self, string:str, end:str="\n") -> None:
         """ Print if verbose """
         if self._verbose:
-            print(string, end=end)
+            print("DEBUG "+string, end=end)
     
     def __getstate__(self):
         """ Overwritten to exclude private attributes in jsonpickle

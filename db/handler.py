@@ -118,10 +118,10 @@ class SQLiteHandler(DataHandler):
         try:
             res = self.cur.execute(query, parameters)
         except Exception as e:
-            self._vprint(f"DEBUG query failed {query}")
-            self._vprint(f"DEBUG db {self.database_path}")
-            self._vprint(f"DEBUG headers {list(map(lambda attr : attr[0], self.cur.description))}")
-            self._vprint(f"DEBUG data {res.fetchall()}")
+            self._vprint(f"query failed {query}")
+            self._vprint(f"db {self.database_path}")
+            self._vprint(f"headers {list(map(lambda attr : attr[0], self.cur.description))}")
+            self._vprint(f"data {res.fetchall()}")
             raise e
         self.con.commit()
         return res
@@ -206,6 +206,7 @@ class SQLiteHandler(DataHandler):
             # Check for unknown table or fields and get the existing ones
             table = self.data_model.get_table(table_name)
             fields = table.get_fields(data[table_name].columns)
+            fields = [f for f in fields if not f.automatic]
             rows = [[i for i in row] for row in data[table_name].itertuples(index=False)]
             # Empty the database table if requested
             if mode == "delete and add": self.clear_table(table)
@@ -258,7 +259,7 @@ class SQLiteHandler(DataHandler):
 
     
     def get_records(
-            self, table:Table|str, sort_by:Optional[str]=None,
+            self, table:Table|str, sort_by:Optional[Record|str]=None,
             where_condition:Optional[str]=None) -> List[Record]:
         """ Return records from database """
         # If table name was given instead of table object, check it exists and get it
@@ -266,9 +267,8 @@ class SQLiteHandler(DataHandler):
             table = self.data_model.get_table(table)
 
         # Check or get sort by field
-        if sort_by: _ = table.get_field(sort_by)
-        elif table.sort_rows_by: sort_by = table.sort_rows_by.field_name  # = None # DEBUG
-        else: sort_by = None
+        if sort_by and type(sort_by) is Record: sort_by = sort_by.field_name
+        elif table.sort_rows_by and not sort_by: sort_by = table.sort_rows_by.field_name
 
         # Build query
         data_query = f'''SELECT *'''
@@ -277,10 +277,9 @@ class SQLiteHandler(DataHandler):
         if sort_by: data_query += f''' ORDER BY {sort_by}'''
         # Fetch data
         data = self._run_query(data_query, []).fetchall()
-
-        # Get non-automatic fields
-        # headers = list(map(lambda attr : attr[0], self.cur.description))
+        # Create records
         records = [Record(table, {h:v for h, v in zip(table.fields, values)}) for values in data]
+        
         return records
     
     def get_record(self, table:Table|str, display_name:str) -> Record:
@@ -296,7 +295,7 @@ class SQLiteHandler(DataHandler):
         # Fetch data
         data = self._run_query(data_query, []).fetchall()
         if not data:
-            print(f"DEBUG couldn't find record for {display_name} in {table.table_name}")
+            self._vprint(f"couldn't find record for {display_name} in {table.table_name}")
             raise Exception
 
         # Get non-automatic fields

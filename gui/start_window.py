@@ -54,7 +54,11 @@ class StartWindow(ApplicationWindow):
         right_content.add_titled(placeholder, "projects", "Projects")
 
         # Application parameters, for later
-        placeholder = Label(label="TODO")
+        placeholder = Label(label="Settings:\n"+\
+            "add self as person, add own socmed accounts\n"+\
+            "add default database for projects\n"+\
+            "add secrets?\n"+\
+            "guided set up if possible")
         right_content.add_titled(placeholder, "settings", "Settings")
 
         self.show_all()

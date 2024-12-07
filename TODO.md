@@ -7,25 +7,23 @@
 [-] save data model to spreadsheet
 [x] debug_schema
 [x] fill static tables
-[!] debug display name concatenation
-[ ] delete_record_or_fail
-[ ] delete_record_or_ignore
-[ ] data control
-    [ ] data types (file, handler, doc)
-        [ ] document field types in doc
-        [ ] any data type control on import?
-        [ ] ...?
-    [ ] mandatory fields
+[?] debug display name concatenation
+[x] delete_record_or_fail
+[x] delete_record_or_ignore
+
 [ ] parameter table and secrets
 [ ] DBHandler() returns the singleton object -> no need to pass the reference in calls
-[ ] test save then init from spreadsheet -> types, etc
+[ ] test save then init from spreadsheet
+    [ ] data controls: types, mandatory, ...
+    [ ] examples
+
 
 ## Graphic interface
 
 [ ] Database Manager
     [x] pick database
     [x] pick table
-        [ ] column order?
+        [x] column order
     [x] pick record
     [x] reload dynamically
     [ ] show record
@@ -42,15 +40,17 @@
         [ ] filepath
         [ ] length
         [ ] date
-    [x] save record (create)
-    [x] save record (edit)
-    [ ] delete record
+    [x] create record
+        [ ] autoselect the newly created record
+    [x] modify record
+        [x] keep modified record selected
+    [x] delete record
         [x] sql handler functions
-        [ ] if edit, popup
-        [ ] if new, cancel
+        [ ] if record selected, confirmation popup
+        [ ] if no record selected, reset to default values
     [ ] cancel
-        [x] edit -> reset to current record
-        [ ] create -> reset to default values
+        [x] if record selected, reset to current record
+        [ ] if no record selected, reset to default values
     [ ] fix horizontal stretch when showing record form
 
 [ ] Projects Handler

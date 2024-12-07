@@ -5,7 +5,7 @@ from gi.repository.Gtk import Entry, CheckButton, Label, ComboBoxText, SpinButto
 from db.handler import DataHandler, SQLiteHandler
 from db.objects import Field, Record, Table, TextField, IntField, BoolField, DateField, FilepathField, LengthField
 from gui.base_graphics import PaddedGrid
-from gui.tables import TableGrid
+from gui.tables import SingleSelectTable
 
 
 class FormField(PaddedGrid):
@@ -52,6 +52,7 @@ class UneditableFormField(FormField):
 class ExtFormField(FormField):
     """ Any form field that is a reference to another table 
     Several implementations in subclasses """
+
     def __init__(self, field:Field, options:List[Record], *args, **kwargs):
         if len(options) > 0:
             sort_by_field = options[0].parent_table.sort_rows_by
@@ -60,20 +61,31 @@ class ExtFormField(FormField):
         if not field.mandatory:
             self._options = [None]+self._options
         super().__init__(field, *args, **kwargs)
+
     def _find_row_of_record(self, to_find:Record) -> int|None:
         row = None
         for i, option in self._options:
             if option == to_find:
                 row = i
-        if row is None: print("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
+        if row is None: self._vprint("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
         return None
+    
     def _find_row_of_text(self, to_find:str) -> int|None:
         row = None
         for i, option in self._options:
             if option.display_name == to_find:
                 row = i
-        if row is None: print("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
+        if row is None: self._vprint("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
         return None
+    
+    def _find_row_of_ID(self, to_find:int) -> Record|None:
+        row = None
+        for i, option in self._options:
+            if option.ID == to_find:
+                row = i
+        if row is None: self._vprint("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
+        return None
+    
     def _init_widget(self): raise NotImplementedError
     def set_value(self, value:Record): raise NotImplementedError
     def get_value(self) -> Record|None: raise NotImplementedError
@@ -98,7 +110,6 @@ class RadioExtFormField(ExtFormField):
         if len(self._options) == 0: return
         self._widget = PaddedGrid()
         none_button = RadioButton.new_with_label(None, "")
-        self._allow_none
         # If the field is not mandatory, none should be an option
         # If there is no default option, it will be the default
         # If there is no default option, no specific button should be selected
@@ -147,7 +158,7 @@ class TableExtFormField(ExtFormField):
     """ A table form field with single selection """
     def _init_widget(self, options:List[Record], *args, **kwargs):
         super()._init_widget(options, *args, **kwargs)
-        self._widget = TableGrid(label="", selection_mode="single", on_selection_changed=self._on_selection_changed)
+        self._widget = None  # SingleSelectTable(label="", selection_mode="single", on_selection_changed=self._on_selection_changed)
         self._current_record = None
         self._widget.reload_table(options)
     def _on_selection_changed(self): pass
@@ -283,11 +294,7 @@ class RecordManager(PaddedGrid):
             return ExtFormField(field, options)
             # if len(options) > 10: return DropdownExtFormField(field, options)
             # return TableExtFormField(field, options)
-        try:
-            return py_type_to_form_mapping[type(field)](field)
-        except Exception as e:
-            print("DEBUG 3", type(field), field)
-            raise e
+        return py_type_to_form_mapping[type(field)](field)
 
     def _empty_form(self):
         for form_field in self._form_fields:
