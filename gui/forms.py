@@ -129,11 +129,6 @@ class RadioExtFormField(ExtFormField):
             none_button.set_no_show_all(True)
             self._options = [None]+self._options
         self._widget.attach_next(none_button)
-        
-        # TODO user can try to create a record with an empty value in a mandatory field
-        # This is an error management issue, for now the database will raise an error
-        # Potential solution: create semi-technical records in these referential tables
-        # that are set as default and can then easily be targeted in data quality audits
 
         for option in self._options[1:]:
             _ = RadioButton.new_with_label_from_widget(none_button, option.display_name)
@@ -233,7 +228,7 @@ class IntFormField(FormField):
         self._widget = SpinButton(adjustment=Adjustment(
             value=0, lower=0, upper=IntFormField.max_int, step_increment=1))
     def set_value(self, value:int):
-        self._widget.set_value(value)  # DEBUG types...
+        self._widget.set_value(value)
     def get_value(self) -> int|None:
         return self._widget.get_value_as_int()
     def set_default(self) -> None:

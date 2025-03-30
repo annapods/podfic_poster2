@@ -180,13 +180,13 @@ class SQLiteHandler(DataHandler):
 
     def export_db_model_to_spreadsheet(self, spreadsheet_path:str="db/database.ods") -> None:
         """ Overwrite spreadsheet data model with database model
-        TODO does not work, and also won't be able to guess date, length, filepath, etc types  """
+        #TODO does not work, and also won't be able to guess date, length, filepath, etc types  """
         schema = self._run_query("""
             WITH tables AS (SELECT name tableName, sql 
             FROM sqlite_master WHERE type = 'table' AND tableName NOT LIKE 'sqlite_%')
             SELECT tableName, name, type, notnull, dflt_value, pk
             FROM tables CROSS JOIN pragma_table_info(tables.tableName) fields""", []).fetchall()
-        # TODO
+        #TODO
         pass
 
     

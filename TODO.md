@@ -4,18 +4,17 @@
 
 [x] init from spreadsheet
 [x] save in spreadsheet
-[ ] save data model to spreadsheet
 [x] debug_schema
 [x] fill static tables
-[?] debug display name concatenation
+[x] debug display name concatenation
 [x] delete_record_or_fail
 [x] delete_record_or_ignore
+[x] data validation functions -> used at Record creation
 
 [ ] parameter table and secrets
 [ ] DBHandler() returns the singleton object -> no need to pass the reference in calls
-[ ] test save then init from spreadsheet
-    [ ] data controls: types, mandatory, ...
-    [ ] examples
+[ ] save data model to spreadsheet
+[ ] test saving to spreadsheet then init from spreadsheet with all data types/configs
 
 
 ## Graphic interface
@@ -81,6 +80,7 @@
 
 ## Basics
 
+[ ] popups?
 [ ] Gtk app??? how to automate tests pls
 [ ] separate GUI and workflow? -> turn GUI bricks into a python library/separate project
 [ ] turn db handler into another library? or already separate enough?
