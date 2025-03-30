@@ -42,18 +42,18 @@ There are currently [TODO] field types:
 Three fields are automatically added to every table:
 
 - `ID`, the primary key, which is an automatically-incremented integer.
-- `display_name`, the readable unique identifier of the record, which is a concatenation of the fields that the data model identifies as part of the display name.
+- `display_name`, the readable unique identifier of the record, which is a concatenation of the fields that are identified as part of the display name in the data model.
 - `creation_date`, the date of creation of the record.
 
 IDs are necessary because the components of display names could be edited. Foreign key fields always reference a record's ID but display names are used in the interface for human readability.
 
 ## Setup
 
-This should one day be doable from the GUI, but as of now, you need to do it in the command line or directly through a python script. #TODO
+This should one day be doable from the GUI, but as of now, you need to do it in the command line or directly through a python script. See `/doc/INSTALLME.md`. #TODO
 
 ### Complete reset
 
-Some of the data that is not supposed to change often is defined in `db/set_options.ods`. Double check that all values are correct and that none are missing.
+Some of the data that is not supposed to change often (options in a referential, for example) is defined in `db/set_options.ods`. Double check that all values are correct and that none are missing.
 
 Then, run the lines below. They will delete any existing `podfics.db` database file and create a new, clean one from the model and the set options.
 
@@ -68,9 +68,9 @@ You can export the current database into a spreadsheet using the `export_db_to_s
 
 ## Data handling in python
 
-
-
 The DataModel contains Table and Field objects.
 
 Data entries are represented by Record objects. These records are not loaded in the data model, but can be fetched by the data handler.
+
+As much as possible, data should be handled as Tables, Fields, and Records. There are auxiliary functions to fetch instances of each of these objects using the data model or data handler.
 

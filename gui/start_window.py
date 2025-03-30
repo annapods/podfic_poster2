@@ -43,7 +43,9 @@ class StartWindow(ApplicationWindow):
         self.main_grid.attach(left_menu, 0, 0, 1, 1)
 
         # DB Manager
-        right_content.add_titled(DBManager(), "db_manager", "DB Manager")
+        self.db_manager = DBManager()
+        self.db_manager.tests()  # TEST
+        right_content.add_titled(self.db_manager, "db_manager", "DB Manager")
 
         # # Example of simple label content
         # content = Gtk.Label(label="this text shows in the right panel")

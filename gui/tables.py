@@ -16,18 +16,15 @@ py_to_gtk_type_mapping = {
 }
 
 
-
-
-
 class TableWidget(PaddedGrid):
     """ Table that can show data from records
     Columns can be set at init or be calculated dynamically from the records given
     Selection is implemented at subclass level
     External interface:
-    - current_selection  # TODO type to define
-    - reload_table
-    - set_selection
-    calls on_change_notify when the selection changes """
+    - self.current_selection, Record or list of Records
+    - self.reload_table(records:Optional[List[Record]])
+    - self.set_selected(to_select:Record|int)
+    Calls on_change_notify (init arg) when the selection changes """
 
     def __init__(
             self, on_change_notify:Callable,
@@ -44,16 +41,12 @@ class TableWidget(PaddedGrid):
         self._treeview = TreeView()
         self._reset_fields(set_fields)
 
-        # Selection method and to do on select
+        # Selection method
         self._tree_selection = self._treeview.get_selection()
         self._set_selection_mode()
         
-        def _on_selection_changed(selection:TreeSelection):  # TODO DEBUG curently,
-            # fetches the first column value, but should be made to return the nth record
-            # make sure that self._records are sorted the same as the data shown to the user
-            # make sure that the fetching works for single and multiple selection
-            # fetch the indexes of the selections
-            # fetch and return the corresponding records
+        # Fetch current ID(s) on selection changed
+        def _on_selection_changed(selection:TreeSelection):
             self._fetch_current(selection)
             on_change_notify()
         
@@ -145,28 +138,26 @@ class TableWidget(PaddedGrid):
         elif type(to_select) is Record:
             to_select = to_select.ID
         row_number = self._find_row_number_by_ID(to_select)
-        if row_number:
+        if not row_number is None:
             self._treeview.set_cursor(self._find_row_number_by_ID(to_select))
 
 
 class SingleSelectTable(TableWidget):
     def _set_selection_mode(self):
         self._tree_selection.set_mode(SelectionMode.SINGLE)
-    def _fetch_current(self, selection):
+    def _fetch_current(self, selection) -> Record:
         (model, pathlist) = selection.get_selected_rows()
         self.current_selection = None
         for path in pathlist:
             record_id =  model.get_value(model.get_iter(path), 0)
             self.current_selection = self._find_record_by_ID(record_id)
-        print("DEBUG 2", self.current_selection)
 
 class MultiSelectTable(TableWidget):
     def _set_selection_mode(self):
         self._tree_selection.set_mode(SelectionMode.MULTIPLE)
-    def _fetch_current(self, selection):
+    def _fetch_current(self, selection) -> List[Record]:
         (model, pathlist) = selection.get_selected_rows()
         self.current_selection = []
         for path in pathlist:
             record_id =  model.get_value(model.get_iter(path), 0)
             self.current_selection.append(self._find_record_by_ID(record_id))
-        print("DEBUG 3", self.current_selection)

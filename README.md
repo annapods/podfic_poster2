@@ -9,7 +9,7 @@ Mostly for me, but if it can be useful feel free to reuse any parts of it? MIT l
 
 ## Documentation
 
-Cf doc/, TODO.md and the github issues.
+Cf doc/ and TODO.md.
 
 ## Technologies used
 

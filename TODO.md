@@ -4,7 +4,7 @@
 
 [x] init from spreadsheet
 [x] save in spreadsheet
-[-] save data model to spreadsheet
+[ ] save data model to spreadsheet
 [x] debug_schema
 [x] fill static tables
 [?] debug display name concatenation
@@ -30,16 +30,16 @@
         [x] text
         [x] boolean
         [x] int
+        [x] filepath
+        [x] length
+        [x] date
         [x] ext no options
         [x] ext radio buttons
-        [ ] ext dropdown
-        [?] ext table
+        [x] ext dropdown
+        [ ] ext table
         [ ] ext add new record to foreign table
             [ ] popup?
-            [ ] default value on one side of the rel)
-        [ ] filepath
-        [ ] length
-        [ ] date
+            [ ] default value on one side of the rel
     [x] create record
         [ ] autoselect the newly created record
     [x] modify record
@@ -54,26 +54,25 @@
     [ ] fix horizontal stretch when showing record form
 
 [ ] Projects Handler
-    [ ] show projects
-    [ ] edit state and status
-        [ ] sort to show?
-        [ ] status of whole project?
-            [ ] one or none?
-            [ ] when and how to calculate?
-    [ ] create a new project
+    [ ] tables to select project and section
+        [ ] select one
+        [ ] aggregated status for whole project?
+        [ ] show project sections of selected project
+    [ ] button to create a new project
         [ ] what info?
         [ ] new window or below?
-    [ ] select project to work on
-        [ ] how to select a step/action?
-        [ ] process definition
-            [ ] setup
-            [ ] post
-            [ ] promo
-            [ ] archive
-    [ ] automatic steps
-        [ ] files discovery
-        [ ] html extraction and auto-fill
-        [ ] etc 
+    [ ] button to create a new section
+    [ ] form to edit project status by stage for selected project section
+    [ ] buttons for steps/actions -> new windows? or frames?
+        [ ] setup
+            [ ] download from ao3
+            [ ] extract info from html
+        [ ] post
+            [ ] automatic file discovery
+        [ ] promo
+        [ ] archive
+            [ ] bsky?
+            [ ] save a yaml file?
 
 [ ] user settings
     [ ] secrets
@@ -82,5 +81,7 @@
 
 ## Basics
 
-[ ] separate GUI and workflow?
-[ ] model view whatever
+[ ] Gtk app??? how to automate tests pls
+[ ] separate GUI and workflow? -> turn GUI bricks into a python library/separate project
+[ ] turn db handler into another library? or already separate enough?
+[ ] model view controler whatever??

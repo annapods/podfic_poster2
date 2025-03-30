@@ -13,7 +13,11 @@ from gui.tables import MultiSelectTable, SingleSelectTable, TableWidget
 class DBManager(PaddedGrid):
     """ Database manager widget, contains tables for table and record selection and a form to edit
     or create records
-    Code interface:
+    Code interface, to be used for setting up tests only:
+    - self.database_path, str
+    - self.current_table, Table
+    - self.current_fields, List[Field]
+    - self.current_record, Record
     - 
     """
 
@@ -33,6 +37,7 @@ class DBManager(PaddedGrid):
             title="Select the database", action=Gtk.FileChooserAction.OPEN)
         db_picker.set_current_folder('./db')
         db_picker.connect("file-set", self._on_file_picked)
+        self._db_picker = db_picker
 
         # Reload database button
         reload_button = Gtk.Button(label="Reload")
@@ -41,7 +46,7 @@ class DBManager(PaddedGrid):
 
         # Database picker and button in a single frame
         database_frame = PaddedFrame(label="Database")
-        database_frame.grid.attach_next(db_picker)
+        database_frame.grid.attach_next(self._db_picker)
         database_frame.grid.attach_next(reload_button, Gtk.PositionType.RIGHT)
         self.attach_next(database_frame)
 
@@ -172,5 +177,34 @@ class DBManager(PaddedGrid):
         self._reload_records_table()
         if old_record:
             self._records_table.set_selected(old_record)
+
+    def set_db(self, db_path:str) -> None:
+        """ For test purposes """
+        self._db_picker.set_filename(db_path)
+        self.database_path = db_path
+        self._reload_db()
+
+    def set_table(self, table:Table|str|Record) -> None:
+        """ For test purposes """
+        if type(table) is str:
+            table = self._db_handler.get_record(
+                table=self._data_table_table, display_name=table)
+        elif type(table) is Table:
+            table = self._db_handler.get_record(
+                table=self._data_table_table, display_name=table.display_name)
+        self._tables_table.set_selected(table)
+    
+    def set_record(self, record:Record|str) -> None:
+        """ For test purposes """
+        if type(record) is str:
+            record = self._db_handler.get_record(
+                table=self.current_table, display_name=record)
+        self._records_table.set_selected(record)
+
+    def tests(self):
+        self.set_db("/home/anna/Documents/code/podfic_poster2/db/podfics.db")
+        self.set_table("contribution")
+        # self.set_record("No Archive Warnings Apply")
+        # print(self.current_record)
 
 

@@ -3,6 +3,8 @@
 
 This is how to use the command line interface (CLI).
 
+#TODO outdated, from the previous version
+
 ## 0 Activating the virtual environment
 
 Linux:

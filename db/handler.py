@@ -277,9 +277,20 @@ class SQLiteHandler(DataHandler):
         if sort_by: data_query += f''' ORDER BY {sort_by}'''
         # Fetch data
         data = self._run_query(data_query, []).fetchall()
-        # Create records
-        records = [Record(table, {h:v for h, v in zip(table.fields, values)}) for values in data]
-        
+        records = []
+        # records = [Record(table, {h:v for h, v in zip(table.fields, values)}) for values in data]
+        for list_value in data:
+            # SQLite does not actually support boolean type and saves it as text (in this case)
+            # For more info, see https://github.com/HaxeFoundation/hxcpp/issues/241
+            # Or https://stackoverflow.com/questions/4824687/how-to-include-a-boolean-in-an-sqlite-where-clause/16880803#16880803
+            # Made the choice to convert to actual booleans in the data handler, since it's supposed to
+            # be the interface between a DB that just happens to be SQLite, and my data model
+            dict_values = {
+                field: eval(value) if type(field) is BoolField else value \
+                for field, value in zip(table.fields, list_value)
+            }
+            records.append(Record(table, dict_values))
+
         return records
     
     def get_record(self, table:Table|str, display_name:str) -> Record:

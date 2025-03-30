@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 from numpy import nan
 from pandas import DataFrame, ExcelFile
+from datetime import datetime, timedelta
+from re import compile as re_compile
+from os.path import exists as path_exists
 
 
 from src.base_object import BaseObject
@@ -23,6 +26,24 @@ def clean_df(df:DataFrame) -> DataFrame:
     df.fillna(nan, inplace=True)
     df.replace([nan], [None], inplace=True)
     return df
+
+    
+def parse_datetime_format(value:str) -> datetime|None:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")  # # YYYY-MM-DD HH:MM:SS
+    except ValueError as e:
+        return None
+    
+def parse_timedelta_format(value:str) -> timedelta|None:
+    regex = re_compile(r'^(?P<hours>\d+?):(?P<minutes>\d{2}):(?P<seconds>\d{2})$')
+    parts = regex.match(value)
+    if not parts: return None
+    parts = parts.groupdict()
+    time_params = {}
+    for name, param in parts.items():
+        if param:
+            time_params[name] = int(param)
+    return timedelta(**time_params)
 
 
 class BaseDataObject(BaseObject):
@@ -95,8 +116,8 @@ class IntField(Field):
 
 class TextField(Field):
     def validate(self, value:Any) -> bool:
-        if (type(value)) is not str: return False
-        if self.mandatory and value == "": return False
+        if self.mandatory:
+            if (type(value)) is not str or value == "": return False
         return True
 
 class BoolField(Field):
@@ -108,22 +129,21 @@ class DateField(Field):
     def validate(self, value:Any) -> bool:
         if (type(value)) is not str: return False
         if self.mandatory and value == "": return False
-        # TODO format checks
-        return True
+        if parse_datetime_format(value): return True
+        return False
 
 class FilepathField(Field):
     def validate(self, value:Any) -> bool:
         if (type(value)) is not str: return False
         if self.mandatory and value == "": return False
-        # TODO format checks
-        return True
+        return path_exists(value)
 
 class LengthField(Field):
     def validate(self, value:Any) -> bool:
         if (type(value)) is not str: return False
         if self.mandatory and value == "": return False
-        # TODO format checks
-        return True
+        if parse_timedelta_format(value): return True
+        return False
 
 
 py_to_spreadsheet_type_mapping = {
@@ -203,6 +223,12 @@ class Record(BaseDataObject):
             self.creation_date = values[creation_date_field]
         # All values are kept
         self.values = values
+        # Validate values
+        for field, value in self.values.items():
+            if not field.automatic and not field.validate(value):
+                raise ValueError(
+                    f"Value {value} is not acceptable for field {field} in {parent_table}\n" +\
+                        str(self.values))
         # Display name is also managed by the database but can change
         # and needs to be known by the python program
         self.recalculate_display_name()

@@ -1,9 +1,10 @@
 from typing import Any, Callable, List, Optional
-from gi.repository.Gtk import Entry, CheckButton, Label, ComboBoxText, SpinButton, Button, PositionType, ComboBox, RadioButton, Align, Adjustment
+from gi.repository.Gtk import Entry, CheckButton, Label, FileChooserButton, ComboBoxText, SpinButton, Button, PositionType, ComboBox, RadioButton, Align, Adjustment
+from datetime import datetime
 
 
 from db.handler import DataHandler, SQLiteHandler
-from db.objects import Field, Record, Table, TextField, IntField, BoolField, DateField, FilepathField, LengthField
+from db.objects import Field, Record, Table, TextField, IntField, BoolField, DateField, FilepathField, LengthField, parse_datetime_format, parse_timedelta_format
 from gui.base_graphics import PaddedGrid
 from gui.tables import SingleSelectTable
 
@@ -31,6 +32,10 @@ class FormField(PaddedGrid):
     def _init_widget(self, *args, **kwargs): raise NotImplementedError
     def set_value(self, value:Any): raise NotImplementedError
     def get_value(self) -> Any: raise NotImplementedError
+    def clear_value(self) -> None: raise NotImplementedError
+    def set_default(self) -> None:
+        if self.field.default_value: self.set_value(self.field.default_value)
+        else: self.clear_value()
 
 
 class UneditableFormField(FormField):
@@ -47,6 +52,8 @@ class UneditableFormField(FormField):
             self._widget.set_label(text_if_none)
     def get_value(self) -> str:
         return self.value
+    def clear_value(self) -> None:
+        pass
 
    
 class ExtFormField(FormField):
@@ -64,31 +71,28 @@ class ExtFormField(FormField):
 
     def _find_row_of_record(self, to_find:Record) -> int|None:
         row = None
-        for i, option in self._options:
+        for i, option in enumerate(self._options):
             if option == to_find:
                 row = i
-        if row is None: self._vprint("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
-        return None
+        if row is None: print("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
+        return row
     
     def _find_row_of_text(self, to_find:str) -> int|None:
         row = None
-        for i, option in self._options:
-            if option.display_name == to_find:
+        if to_find == "": return 0
+        for i, option in enumerate(self._options):
+            if option and option.display_name == to_find:
                 row = i
-        if row is None: self._vprint("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
-        return None
+        if row is None: print("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
+        return row
     
     def _find_row_of_ID(self, to_find:int) -> Record|None:
         row = None
-        for i, option in self._options:
+        for i, option in enumerate(self._options):
             if option.ID == to_find:
                 row = i
-        if row is None: self._vprint("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
-        return None
-    
-    def _init_widget(self): raise NotImplementedError
-    def set_value(self, value:Record): raise NotImplementedError
-    def get_value(self) -> Record|None: raise NotImplementedError
+        if row is None: print("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
+        return row
     
 
 class NAExtFormField(UneditableFormField, ExtFormField):
@@ -101,6 +105,7 @@ class NAExtFormField(UneditableFormField, ExtFormField):
         UneditableFormField.set_value(self, None, "No options available")
     def set_value(self, value = None): pass
     def get_value(self) -> None: return None
+    def clear_value(self) -> None: pass
 
 
 class RadioExtFormField(ExtFormField):
@@ -109,7 +114,7 @@ class RadioExtFormField(ExtFormField):
         # https://stackoverflow.com/questions/391237/pygtk-radio-button
         if len(self._options) == 0: return
         self._widget = PaddedGrid()
-        none_button = RadioButton.new_with_label(None, "")
+
         # If the field is not mandatory, none should be an option
         # If there is no default option, it will be the default
         # If there is no default option, no specific button should be selected
@@ -118,33 +123,44 @@ class RadioExtFormField(ExtFormField):
         # Source: https://stackoverflow.com/questions/1774161/is-there-a-way-to-uncheck-all-radio-buttons-in-a-group-pygtk
         # Combined with force-hiding it to avoid the refresh of the form by show_all
         # Source: https://github.com/JuliaGraphics/Gtk.jl/issues/609#issuecomment-1013753722
-        # TODO user can try to create a record with an empty value in a mandatory field
-        # This is an error management issue, for now the database will raise an error
-        # Potential solution: create semi-technical records in these referential tables
-        # that are set as default and can then easily be targeted in data quality audits
+        none_button = RadioButton.new_with_label(None, "")
         if self._options[0] != None:
             none_button.hide()
             none_button.set_no_show_all(True)
             self._options = [None]+self._options
         self._widget.attach_next(none_button)
+        
+        # TODO user can try to create a record with an empty value in a mandatory field
+        # This is an error management issue, for now the database will raise an error
+        # Potential solution: create semi-technical records in these referential tables
+        # that are set as default and can then easily be targeted in data quality audits
+
         for option in self._options[1:]:
             _ = RadioButton.new_with_label_from_widget(none_button, option.display_name)
             self._widget.attach_next(_)
         self._buttons = list(reversed(none_button.get_group()))
+        self.set_default()
+
     def set_value(self, value:Record):
         row = self._find_row_of_record(value)
         if row: self._buttons[row].set_active(True)
+
     def get_value(self) -> Record|None:
         active_radios = [i for i, radio in enumerate(self._buttons) if radio.get_active()]
         # if not active_radios: return None
         return self._options[active_radios[0]]
+    
+    def clear_value(self) -> None:
+        self._buttons[0].set_active(True)
 
 class DropdownExtFormField(ExtFormField):
     """ An external form field with a dropdown menu """
     def _init_widget(self):
         self._widget = ComboBoxText()
         for i, option in enumerate(self._options):
-            self._widget.insert(i, str(i), option.display_name)
+            self._widget.insert(i, str(i),
+                option.display_name if type(option) is Record else "")
+        self.set_default()
     def set_value(self, value:Record):
         row = self._find_row_of_record(value)
         self._widget.set_active(row)
@@ -153,6 +169,8 @@ class DropdownExtFormField(ExtFormField):
         if not text: return None
         row = self._find_row_of_text(text)
         return self._options[row]
+    def clear_value(self) -> None:
+        self._widget.set_active(0)
 
 class TableExtFormField(ExtFormField):
     """ A table form field with single selection """
@@ -164,6 +182,7 @@ class TableExtFormField(ExtFormField):
     def _on_selection_changed(self): pass
     def set_value(self, value:Record): raise NotImplementedError
     def get_value(self) -> Record: raise NotImplementedError
+    def clear_value(self) -> None: raise NotImplementedError
 
 
 class TextFormField(FormField):
@@ -177,6 +196,8 @@ class TextFormField(FormField):
         self._widget.set_text(str(value))
     def get_value(self) -> str:
         return self._widget.get_text()
+    def clear_value(self) -> None:
+        self.set_value("")
 
 class BoolFormField(FormField):
     """ BOOLEAN form field """
@@ -187,26 +208,22 @@ class BoolFormField(FormField):
         self._widget.set_active(value)
     def get_value(self) -> bool:
         return self._widget.get_active()
+    def clear_value(self):
+        self.set_value(False)
     
-class DateFormField(FormField):
+class DateFormField(TextFormField):
     """ DATE form field """
-    def _init_widget(self):
-        self._widget = Entry()  # TODO
-        if self.field.default_value: self._widget.set_text(self.field.default_value)
-    def set_value(self, value:str):
-        self._widget.set_text(value)
-    def get_value(self) -> str:
-        return self._widget.get_text()
+    def _init_widget(self, *args, **kwargs):
+        TextFormField._init_widget(self, *args, **kwargs)
+    def clear_value(self):
+        self.set_value(datetime.today().strftime('%Y-%m-%d %H:%M:%S'))
 
-class LengthFormField(FormField):
+class LengthFormField(TextFormField):
     """ LENGTH form field """
-    def _init_widget(self):
-        self._widget = Entry()  # TODO
-        if self.field.default_value: self._widget.set_text(self.field.default_value)
-    def set_value(self, value:str):
-        self._widget.set_text(value)
-    def get_value(self) -> str:
-        return self._widget.get_text()
+    def _init_widget(self, *args, **kwargs):
+        TextFormField._init_widget(self, *args, **kwargs)
+    def clear_value(self):
+        self.set_value("00:00:00")
 
 class IntFormField(FormField):
     """ INTEGER form field """
@@ -219,16 +236,27 @@ class IntFormField(FormField):
         self._widget.set_value(value)  # DEBUG types...
     def get_value(self) -> int|None:
         return self._widget.get_value_as_int()
+    def set_default(self) -> None:
+        self.set_value(0)
 
 class FilepathFormField(FormField):
     """ FILEPATH form field """
     def _init_widget(self):
-        self._widget = Entry()  # TODO
-        if self.field.default_value: self._widget.set_text(self.field.default_value)
+        self._widget = FileChooserButton()
+        self._widget.set_width_chars(50)
+        # self._widget.set_current_folder('./db')
+        def on_file_picked(file_chooser_button):
+              pass  # self.value = file_chooser_button.get_filename()
+        self._widget.connect("file-set", on_file_picked)
+
+        if self.field.default_value: self._widget.set_value(self.field.default_value)
+
     def set_value(self, value:str):
-        self._widget.set_text(value)
+        self._widget.set_filename(value)
     def get_value(self) -> str:
-        return self._widget.get_text()
+        return self._widget.get_filename()
+    def set_default(self) -> None:
+        self.set_value(".")
 
 
 py_type_to_form_mapping = {
@@ -289,10 +317,9 @@ class RecordManager(PaddedGrid):
         if field.foreign_key_table:
             options = self._db_handler.get_records(table=field.foreign_key_table)
             if len(options) == 0: return NAExtFormField(field, options)
-            if len(options) > 5: return RadioExtFormField(field, options)
-            if len(options) > 10: return RadioExtFormField(field, options)
-            return ExtFormField(field, options)
-            # if len(options) > 10: return DropdownExtFormField(field, options)
+            if len(options) < 5: return RadioExtFormField(field, options)
+            if len(options) < 10: return DropdownExtFormField(field, options)
+            return DropdownExtFormField(field, options)
             # return TableExtFormField(field, options)
         return py_type_to_form_mapping[type(field)](field)
 
@@ -301,10 +328,6 @@ class RecordManager(PaddedGrid):
             self._form_fields_grid.remove(form_field)
         self._form_fields = []
         self._form_fields_grid.last_added = None
-    
-    def _update_record_from_form(self):
-        for form_field in self._form_fields:
-            self._record.values[form_field.field] = form_field.get_value()
     
     def _update_form_from_record(self):
         for form_field in self._form_fields:
@@ -320,8 +343,7 @@ class RecordManager(PaddedGrid):
     
     def _update_form_from_default(self):
         for form_field in self._form_fields:
-            if form_field.field.default_value != "" and form_field.field.default_value != None:
-                form_field.set_value(form_field.field.default_value)
+            form_field.set_default()
 
     def reset_form_from_record(self, record:Record):
         """ Recreate all form fields and fill them with record values """
@@ -355,12 +377,14 @@ class RecordManager(PaddedGrid):
         self.show_all()
 
     def _on_button_save_clicked(self, button:Button):
+        # Fetch and validate values
+        values = {form_field.field:form_field.get_value() for form_field in self._form_fields}
         if not self._record:
-            values = {form_field.field: form_field.get_value() for form_field in self._form_fields}
             self._record = Record(self._table, values)
             self._record.save_to_db(new=True)
         else:
-            self._update_record_from_form()
+            for field, value in values:
+                self._record.values[field] = value
             self._record.save_to_db(new=False)
         self._on_change_notify()
 

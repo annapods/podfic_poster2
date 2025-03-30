@@ -15,7 +15,7 @@ class PaddedFrame(Frame):
         self.add(self.grid)
 
 
-class PaddedGrid(Grid, BaseObject):
+class PaddedGrid(Grid, BaseObject):  # TODO cannot add verbose mode...
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._verbose = True  # DEBUG need to check why I need to declare it here...

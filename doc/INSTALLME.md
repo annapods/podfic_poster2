@@ -1,6 +1,8 @@
 
 # Set up
 
+#TODO outdated, from the previous version
+
 ## OS and programs
 
 Requires python, gtk, pip and gettext. On Linux, these can be installed with:
