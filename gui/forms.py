@@ -1,11 +1,14 @@
-from typing import Any, Callable, List, Optional
-from gi.repository.Gtk import Entry, CheckButton, Label, FileChooserButton, ComboBoxText, SpinButton, Button, PositionType, ComboBox, RadioButton, Align, Adjustment
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from gi.repository.Gtk import Entry, CheckButton, Label, FileChooserButton, ComboBoxText, \
+    SpinButton, Button, PositionType, ComboBox, RadioButton, Align, Adjustment, \
+    STOCK_CANCEL, STOCK_OK
 from datetime import datetime
 
 
 from db.handler import DataHandler, SQLiteHandler
 from db.objects import Field, Record, Table, TextField, IntField, BoolField, DateField, FilepathField, LengthField, parse_datetime_format, parse_timedelta_format
-from gui.base_graphics import PaddedGrid
+from gui.base_graphics import PaddedFrame, PaddedGrid
+from gui.confirm_dialog import ConfirmDialog, Dialog
 from gui.tables import SingleSelectTable
 
 
@@ -264,48 +267,28 @@ py_type_to_form_mapping = {
 }
 
 
-class RecordManager(PaddedGrid):
-    """ Form to manage a record, including creating a new one
-
+class RecordForm(PaddedGrid):
+    """ All fields of a record, existing or to-be
     Code interface:
+    - last_table
+    - last_record
+    - get_current_values
     - reset_form_from_record
     - reset_form_from_table
-    - reset_form_from_nothing
-    Code interface excludes python data because the user input is a draft until they
-    save it to the database using the user interface
+    - reset_form_from_nothing """
 
-    User interface:
-    - Save
-    - Cancel
-    - Delete """
-    def __init__(self, on_change_notify:Callable):  # TODO specify fields? and field order
+    def __init__(self, db_handler:SQLiteHandler):  # TODO specify fields? and field order
         super().__init__()
 
         # Current info and helpers
-        self._db_handler = SQLiteHandler()
-        self._record = None
-        self._table = None
+        self.last_record = None
+        self.last_table = None
         self._form_fields = []
-        self._on_change_notify = on_change_notify
+        self._db_handler = db_handler
 
         # Form fields and the corresponding grid will be filled by reset_form_from_record or reset_form_from_table
         self._form_fields_grid = PaddedGrid()
         self.attach_next(self._form_fields_grid)
-
-        # Action buttons
-        save_button = Button(label="Save")
-        save_button.connect("clicked", self._on_button_save_clicked)
-        cancel_button = Button(label="Cancel")
-        cancel_button.connect("clicked", self._on_button_cancel_clicked)
-        delete_button = Button(label="Delete")
-        delete_button.connect("clicked", self._on_button_delete_clicked)
-
-        self.attach_next(save_button)
-        self.attach_next(cancel_button, PositionType.RIGHT)
-        self.attach_next(delete_button, PositionType.RIGHT)
-        # Action buttons
-        # self.attach_next(
-        #     action_buttons_grid, PositionType.BOTTOM, 3, 1)
     
     def _get_form_field(self, field:Field) -> FormField:
         """ Return an empty form_field from the right type """
@@ -318,76 +301,194 @@ class RecordManager(PaddedGrid):
             # return TableExtFormField(field, options)
         return py_type_to_form_mapping[type(field)](field)
 
-    def _empty_form(self):
-        for form_field in self._form_fields:
-            self._form_fields_grid.remove(form_field)
-        self._form_fields = []
-        self._form_fields_grid.last_added = None
-    
-    def _update_form_from_record(self):
-        for form_field in self._form_fields:
-            if form_field.field.field_name == "ID":
-                form_field.set_value(self._record.ID)
-            elif form_field.field.field_name == "display_name":
-                form_field.set_value(self._record.display_name)
-            elif form_field.field.field_name == "creation_date":
-                form_field.set_value(self._record.creation_date)
-            else:
-                value = self._record.values[form_field.field]
-                form_field.set_value(value)
-    
-    def _update_form_from_default(self):
-        for form_field in self._form_fields:
-            form_field.set_default()
-
     def reset_form_from_record(self, record:Record):
         """ Recreate all form fields and fill them with record values """
-        self._empty_form()
-        self._record = record
-        self._table = record.parent_table
+        self.reset_form_from_nothing()
+        self.last_record = record
+        self.last_table = record.parent_table
+
         for field in record.parent_table.fields:
             form_field = self._get_form_field(field)
             self._form_fields_grid.attach_next(form_field)
             self._form_fields.append(form_field)
-        self._update_form_from_record()
+
+        for form_field in self._form_fields:
+            if form_field.field.field_name == "ID":
+                form_field.set_value(self.last_record.ID)
+            elif form_field.field.field_name == "display_name":
+                form_field.set_value(self.last_record.display_name)
+            elif form_field.field.field_name == "creation_date":
+                form_field.set_value(self.last_record.creation_date)
+            else:
+                value = self.last_record.values[form_field.field]
+                form_field.set_value(value)
         self.show_all()
 
     def reset_form_from_table(self, table:Table):
         """ Recreate all form fields and fill them with default values"""
-        self._empty_form()
-        self._record = None
-        self._table = table
+        self.reset_form_from_nothing()
+        self.last_table = table
+
         for field in table.fields:
             form_field = self._get_form_field(field)
             self._form_fields_grid.attach_next(form_field)
             self._form_fields.append(form_field)
-        self._update_form_from_default()
+
+        for form_field in self._form_fields:
+            form_field.set_default()
+            
         self.show_all()
     
     def reset_form_from_nothing(self):
         """ Remove form """
-        self._empty_form()
-        self._record = None
-        self._table = None
+        for form_field in self._form_fields:
+            self._form_fields_grid.remove(form_field)
+        self._form_fields = []
+        self._form_fields_grid.last_added = None
+        self.last_record = None
+        self.last_table = None
+        self.show_all()
+
+    def get_current_values(self) -> Dict[Field, Any]:
+        return {form_field.field:form_field.get_value() for form_field in self._form_fields}
+
+
+class RecordManagerGrid(PaddedGrid):
+    """ Form + save + cancel + delete, in a grid
+    For directly in a main window """
+    def __init__(self, on_change_notify:Callable):  # TODO specify fields? and field order
+        super().__init__()
+
+        # Current info and helpers
+        self._db_handler = SQLiteHandler()
+        self._on_change_notify = on_change_notify
+        self.form = RecordForm(self._db_handler)
+        self.attach_next(self.form)
+
+        # Action buttons
+        save_button = Button(label="Save")
+        save_button.connect("clicked", self._on_button_save_clicked)
+        cancel_button = Button(label="Cancel")
+        cancel_button.connect("clicked", self._on_button_cancel_clicked)
+        delete_button = Button(label="Delete")
+        delete_button.connect("clicked", self._on_button_delete_clicked)
+
+        # TODO button grid
+        self.form.attach_next(save_button)
+        self.form.attach_next(cancel_button, PositionType.RIGHT)
+        self.form.attach_next(delete_button, PositionType.RIGHT)
+        # Action buttons
+        # self.attach_next(
+        #     action_buttons_grid, PositionType.BOTTOM, 3, 1)
+
+    def _on_button_save_clicked(self, button:Button):
+        # Fetch and validate values
+        values = self.form.get_current_values()
+        if not self.form.last_record:
+            self.form.last_record = Record(self.form.last_table, values)
+            self.form.last_record.save_to_db(new=True)
+            self.form.reset_form_from_record(self.form.last_record)
+        else:
+            for field in values:
+                self.form.last_record.values[field] = values[field]
+            self.form.last_record.save_to_db(new=False)
+            self.form.last_record.recalculate_display_name()
+            self.form.reset_form_from_record(self.form.last_record)
+        self._on_change_notify()
+
+    def _on_button_cancel_clicked(self, button:Button):
+        if self.form.last_record: self.form.reset_form_from_record(self.form.last_record)
+        elif self.form.last_table: self.form.reset_form_from_table(self.form.last_table)
+        else: self.form.reset_form_from_nothing()
+
+    def _on_button_delete_clicked(self, button:Button):
+        if self.form.last_record:
+            popup = ConfirmDialog(self, freeze_app=True)
+            response = popup.run()
+            if response == Dialog.OK:
+                self._db_handler.delete_record_or_fail(self.form.last_record)
+                self.form.last_record = None
+                self.form.reset_form_from_table(self.form.last_table)
+                self._on_change_notify()
+            elif response == Dialog.CANCEL:
+                pass
+            popup.destroy()
+            
+
+
+class RecordManagerDialog(Dialog):
+    """ Form + save + cancel + delete, in a popup
+    # TODO define user interface: what popups do we want, with what buttons, when? """
+    def __init__(self,
+            on_change_notify:Callable,
+            db_handler:SQLiteHandler, table:Table, record:Record=None,
+            self_destruct_after_call:bool=True,):
+        super().__init__(title="Edit record", freeze_app=False)
+        # self.set_default_size(150, 100)
+
+        self._db_handler = db_handler
+
+        def _on_change_notify() -> Tuple[Table, Record]:
+            """ Wrapper to add table and record to callable"""
+            on_change_notify(self.form.last_table, self.form.last_record)
+            if self_destruct_after_call:
+                self.destroy()
+        self._on_change_notify = _on_change_notify
+        
+        self.form = RecordForm(db_handler)
+        self._box.add(self.form)
+
+        if record: self.form.reset_form_from_record(record)
+        else: self.form.reset_form_from_table(table)
+
+        # Action buttons
+        save_button = Button(label="Save")
+        save_button.connect("clicked", self._on_button_save_clicked)
+        cancel_button = Button(label="Cancel")
+        cancel_button.connect("clicked", self._on_button_cancel_clicked)
+        delete_button = Button(label="Delete")
+        delete_button.connect("clicked", self._on_button_delete_clicked)
+
+        # TODO button grid
+        self.form.attach_next(save_button)
+        self.form.attach_next(cancel_button, PositionType.RIGHT)
+        self.form.attach_next(delete_button, PositionType.RIGHT)
+        # Action buttons
+        # self.attach_next(
+        #     action_buttons_grid, PositionType.BOTTOM, 3, 1)
+
         self.show_all()
 
     def _on_button_save_clicked(self, button:Button):
         # Fetch and validate values
-        values = {form_field.field:form_field.get_value() for form_field in self._form_fields}
-        if not self._record:
-            self._record = Record(self._table, values)
-            self._record.save_to_db(new=True)
+        values = self.form.get_current_values()
+        if not self.form.last_record:
+            self.form.last_record = Record(self.form.last_table, values)
+            self.form.last_record.save_to_db(new=True)
+            self.form.reset_form_from_record(self.form.last_record)
         else:
-            for field, value in values:
-                self._record.values[field] = value
-            self._record.save_to_db(new=False)
+            for field in values:
+                self.form.last_record.values[field] = values[field]
+            self.form.last_record.save_to_db(new=False)
+            self.form.last_record.recalculate_display_name()
+            self.form.reset_form_from_record(self.form.last_record)
         self._on_change_notify()
 
     def _on_button_cancel_clicked(self, button:Button):
-        if self._record: self._update_form_from_record()
-        elif self._table: self._update_form_from_default()
+        if self.form.last_record: self.form.reset_form_from_record(self.form.last_record)
+        elif self.form.last_table: self.form.reset_form_from_table(self.form.last_table)
+        else: self.form.reset_form_from_nothing()
 
     def _on_button_delete_clicked(self, button:Button):
-        if self._record:
-            self._db_handler.delete_record_or_fail(self._record)
-            self._on_change_notify()
+        if self.form.last_record:
+            popup = ConfirmDialog(self, freeze_app=True)
+            response = popup.run()
+            if response == Dialog.OK:
+                self._db_handler.delete_record_or_fail(self.form.last_record)
+                self.form.last_record = None
+                self.form.reset_form_from_table(self.form.last_table)
+                self._on_change_notify()
+            elif response == Dialog.CANCEL:
+                pass
+            popup.destroy()
+            

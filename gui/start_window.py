@@ -5,7 +5,7 @@ from gi.repository.Gtk import ApplicationWindow, Grid, Stack, StackSidebar, Labe
 
 
 from gui.base_graphics import ScrollWindow
-from gui.db_management_widget import DBManager
+from gui.db_management_widget import DBManager, DBManager2
 
 
 class StartWindow(ApplicationWindow):
@@ -43,7 +43,7 @@ class StartWindow(ApplicationWindow):
         self.main_grid.attach(left_menu, 0, 0, 1, 1)
 
         # DB Manager
-        self.db_manager = DBManager()
+        self.db_manager = DBManager2()
         self.db_manager.tests()  # TEST
         right_content.add_titled(self.db_manager, "db_manager", "DB Manager")
 

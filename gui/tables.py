@@ -140,6 +140,8 @@ class TableWidget(PaddedGrid):
         row_number = self._find_row_number_by_ID(to_select)
         if not row_number is None:
             self._treeview.set_cursor(self._find_row_number_by_ID(to_select))
+        else:
+            self._treeview.get_selection().unselect_all()
 
 
 class SingleSelectTable(TableWidget):
