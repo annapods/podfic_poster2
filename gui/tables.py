@@ -113,6 +113,8 @@ class TableWidget(PaddedGrid):
         """ Reload the table with the given records
         Warning, might not display columns if there is no record and no set columns were specified for this table """
 
+        self._datastore.clear()
+
         if records:
             # If no set columns at init, recalculate them based on given records
             # The data table is also dynamic in that case
@@ -123,15 +125,14 @@ class TableWidget(PaddedGrid):
             records.sort(key=lambda r: r.values[self._table.sort_rows_by])
             self._records = records
         
-        self._datastore.clear()
-        for record in records:
-            try:
-                self._datastore.append([record.values[f] for f in self._fields])
-            except Exception as e:
-                self._vprint(f"DEBUG couldn't add record to table widget...\nTable:{self._table}\nFields:{self._fields}\nRecord: {record}")
-                raise e
+            for record in records:
+                try:
+                    self._datastore.append([record.values[f] for f in self._fields])
+                except Exception as e:
+                    self._vprint(f"DEBUG couldn't add record to table widget...\nTable:{self._table}\nFields:{self._fields}\nRecord: {record}")
+                    raise e
 
-    def set_selected(self, to_select:Record|int) -> None:
+    def set_selected(self, to_select:Record|int|None) -> None:
         if to_select is None:
             self._treeview.get_selection().unselect_all()
             return
@@ -163,3 +164,4 @@ class MultiSelectTable(TableWidget):
         for path in pathlist:
             record_id =  model.get_value(model.get_iter(path), 0)
             self.current_selection.append(self._find_record_by_ID(record_id))
+

@@ -119,9 +119,6 @@ class SQLiteHandler(DataHandler):
             res = self.cur.execute(query, parameters)
         except Exception as e:
             self._vprint(f"query failed {query}")
-            self._vprint(f"db {self.database_path}")
-            self._vprint(f"headers {list(map(lambda attr : attr[0], self.cur.description))}")
-            self._vprint(f"data {res.fetchall()}")
             raise e
         self.con.commit()
         return res

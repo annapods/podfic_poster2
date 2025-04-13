@@ -2,49 +2,51 @@ from typing import Callable, Tuple
 from gi.repository.Gtk import Dialog as GtkDialog, STOCK_CANCEL, STOCK_OK, Label, Button
 from gi.repository.Gtk import ResponseType, PositionType
 
+from gui.base_graphics import ScrollWindow
+
 
 
 class Dialog(GtkDialog):
+    """ Parent class for all dialogs """
+    
     OK = ResponseType.OK
     CANCEL = ResponseType.CANCEL
-    def __init__(self, title:str, freeze_app:bool=False):  # TODO DEBUG freeze_app, always freezes
+
+    def __init__(self, title:str, freeze_app:bool=False, parent=None):
         super().__init__(title=title, flags=0)
-        self._box = self.get_content_area()
-        if freeze_app: self.set_modal(True)
-        self.set_default_size(150, 100)
-    # self.set_modal
-    # self.hide() removes the dialog from view, however keeps it stored in memory
-    # self.destroy()
+        content_area = self.get_content_area()
+        self._box = ScrollWindow()
+        content_area.add(self._box)
+        self.show_all()
+        self.set_transient_for(parent)
+        self.set_modal(freeze_app)
+        # self.hide() removes the dialog from view, however keeps it stored in memory
+        # self.destroy()
 
 class InfoDialog(Dialog):
-    def __init__(self, title:str="FYI", text:str="Did you know...?", freeze_app=False):
-        super().__init__(title=title, freeze_app=freeze_app)
-        self.add_buttons(STOCK_OK, Dialog.ok)
+    """ Popup with text and title, closes when OK is clicked """
+    def __init__(
+            self, title:str="FYI", text:str="Did you know...?",
+            freeze_app:bool=False, parent=None):
+        super().__init__(title=title, freeze_app=freeze_app, parent=parent)
         label = Label(label=text)
         self._box.add(label)
+
+        button_ok = Button(label="OK")
+        button_ok.connect("clicked", lambda x: self.destroy())
+        self._box.add(button_ok)
+        
         self.show_all()
+        self.set_modal(freeze_app)
+
 
 class ConfirmDialog(Dialog):
-    cancel = ResponseType.CANCEL
+    """ """
     def __init__(
-            self, title:str="Confirm?",
-            text:str="Do you really want to do this?", freeze_app=True):
-        super().__init__(title=title, freeze_app=freeze_app)
+            self, title:str="Confirm?", text:str="Do you really want to do this?",
+            freeze_app:bool=True, parent=None):
+        super().__init__(title=title, freeze_app=freeze_app, parent=parent)
         self.add_button(STOCK_CANCEL, Dialog.CANCEL)
         self.add_button(STOCK_OK, Dialog.OK)
         self._box.add(Label(label=text))
         self.show_all()
-
-
-# button = Button(label="Open dialog")
-# button.connect("clicked", self.on_button_clicked)
-# self.add(button)
-
-# def on_button_clicked(self, widget):
-#     dialog = ConfirmDialog(self)
-#     response = dialog.run()
-#     if response == ResOK:
-#         print("The OK button was clicked")
-#     elif response == ResCANCEL:
-#         print("The Cancel button was clicked")
-#     dialog.destroy()

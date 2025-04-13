@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 from gi.repository import Gtk
 from gi.overrides.Gtk import Button
 
@@ -52,18 +52,18 @@ class DBManager(PaddedGrid):
         self.attach_next(database_frame)
 
         # Tables
-        def frame_table(table:TableWidget, label:str) -> PaddedFrame:
+        def frame_grid(table:TableWidget, label:str) -> PaddedFrame:
             # TODO outside of this class?
             frame = PaddedFrame(label=label)
             frame.grid.attach_next(table)
             return frame
 
         self._tables_table = SingleSelectTable(self._on_table_selection_changed)
-        self.attach_next(frame_table(self._tables_table, "Tables"))
+        self.attach_next(frame_grid(self._tables_table, "Tables"))
         self._fields_table = MultiSelectTable(self._on_fields_selection_changed)
-        self.attach_next(frame_table(self._fields_table, "Table fields"))
+        self.attach_next(frame_grid(self._fields_table, "Table fields"))
         self._records_table = SingleSelectTable(self._on_records_selection_changed)
-        self.attach_next(frame_table(self._records_table, "Table records"))
+        self.attach_next(frame_grid(self._records_table, "Table records"))
 
         # Record form
         self._record_grid = RecordManagerGrid(on_change_notify=self._on_record_modified)
@@ -210,14 +210,12 @@ class DBManager(PaddedGrid):
 
 
 
-
 class DBManager2(PaddedGrid):
     """ Database manager widget, contains tables for table and record selection and action buttons
     Code interface, to be used for setting up tests only:
     - self.database_path, str
     - self.current_table, Table
     - self.current_fields, List[Field]
-    - self.current_record, Record
     - 
     """
 
@@ -228,9 +226,6 @@ class DBManager2(PaddedGrid):
         self.database_path = ""
         self._db_handler = None
         self.current_table = None
-        self.current_fields = []  # Obsolete, was intended to filter the columns to show in records table
-        self.current_record = None
-
         
         # Database picker
         db_picker = Gtk.FileChooserButton(
@@ -251,36 +246,26 @@ class DBManager2(PaddedGrid):
         self.attach_next(database_frame)
 
         # Tables
-        def frame_table(table:TableWidget, label:str) -> PaddedFrame:
+        def frame_grid(table:PaddedGrid, label:str) -> PaddedFrame:
             # TODO outside of this class?
             frame = PaddedFrame(label=label)
             frame.grid.attach_next(table)
+            table.set_column_homogeneous(True)  #DEBUG size
             return frame
 
         self._tables_table = SingleSelectTable(self._on_table_selection_changed)
-        self.attach_next(frame_table(self._tables_table, "Tables"))
-        self._fields_table = MultiSelectTable(self._on_fields_selection_changed)
-        self.attach_next(frame_table(self._fields_table, "Table fields"))
-        self._records_table = SingleSelectTable(self._on_records_selection_changed)
-        self.attach_next(frame_table(self._records_table, "Table records"))
-
-        # Action buttons
-        new_button = Button(label="New")
-        new_button.connect("clicked", self._on_button_new_clicked)
-        edit_button = Button(label="Edit")
-        edit_button.connect("clicked", self._on_button_edit_clicked)
-        delete_button = Button(label="Delete")
-        delete_button.connect("clicked", self._on_button_delete_clicked)
-        self.attach_next(new_button)
-        self.attach_next(edit_button, Gtk.PositionType.RIGHT)
-        self.attach_next(delete_button, Gtk.PositionType.RIGHT)
+        self.attach_next(frame_grid(self._tables_table, "Tables"))
+        self._fields_table = MultiSelectTable(lambda: None)
+        self.attach_next(frame_grid(self._fields_table, "Table fields"))
+        self._records_table = TableManager(lambda: None)  # TODO
+        self.attach_next(frame_grid(self._records_table, "Table records"))
     
 
     def _reload_db(self) -> None:
         """ """
         self._db_handler = SQLiteHandler(self.database_path)
         self._db_handler.change_db(self.database_path)
-        self._reload_tables_table()        
+        self._reload_tables_table()
         # A few data model stuff that doesn't need to be calculated every time
         self._data_table_table = self._db_handler.data_model.get_table("data_table")
         self._table_name_field = self._data_table_table.get_field("table_name")
@@ -295,7 +280,6 @@ class DBManager2(PaddedGrid):
         This table shows the data_table records """
         records = self._db_handler.get_records(table="data_table")
         self._tables_table.reload_table(records)
-        self.current_fields = None
         self._reload_fields_table()
         self._reload_records_table()
     
@@ -309,18 +293,11 @@ class DBManager2(PaddedGrid):
         self._fields_table.reload_table(records)
 
     def _reload_records_table(self) -> None:
-        """ Reload the records table, reload in cascade the elements that depend on that table
+        """ Reload the records table
         This table shows the records of the selected table, if any
-        If no table has been selected, or if the table is empty, nothing will be shown, not even column headers """
-        if self.current_table:
-            records = \
-                self._db_handler.get_records(
-                    table=self.current_table, sort_by=None
-            )
-        else:
-            records = []
-        self._records_table.reload_table(records)
-        self.current_record = None
+        If no table has been selected, or if the table is empty, nothing will be shown,
+        not even column headers """
+        self._records_table.reload_table(table=self.current_table)
 
     def _on_file_picked(self, file_chooser_button):
         """ Callback for database file selection """
@@ -333,57 +310,15 @@ class DBManager2(PaddedGrid):
     def _on_table_selection_changed(self) -> None:
         """ Callback for table selection """
         if self._tables_table.current_selection:
-            self.current_table = self._get_table_from_table_record(self._tables_table.current_selection)
+            self.current_table = self._get_table_from_table_record(
+                self._tables_table.current_selection)
         self.current_fields = []
         self._reload_fields_table()
-        self.current_record = None
         self._reload_records_table()
-
-    def _on_fields_selection_changed(self) -> None:
-        """ Callback for fields selection """
-        self.current_fields = self._fields_table.current_selection
-        # self._reload_records_table()
-    
-    def _on_records_selection_changed(self) -> None:
-        """ Callback for record selection """
-        self.current_record = self._records_table.current_selection
-        # self._reload_record_form()
 
     def _on_button_reload_clicked(self, button:Button) -> None:
         """ Callback for database reload button """
         self._reload_db()
-
-    def _on_button_new_clicked(self, button:Button) -> None:
-        """ Callback for record create button"""
-        if self.current_table:
-            popup = RecordManagerDialog(
-                self._on_record_modified,
-                self._db_handler, self.current_table, None,
-                self_destruct_after_call=True)
-            response = popup.run()
-            popup.destroy()
-            
-
-    def _on_button_edit_clicked(self, button:Button) -> None:
-        """ Callback for record edit button"""
-        if self.current_table:
-            popup = RecordManagerDialog(
-                self._on_record_modified,
-                self._db_handler, self.current_table, self.current_record,
-                self_destruct_after_call=False)
-            response = popup.run()
-            popup.destroy()
-
-    def _on_button_delete_clicked(self, button:Button) -> None:
-        """ Callback for record edit button"""
-    
-
-    def _on_record_modified(self, table:Table, record:Record) -> None:
-        """ Callback for the record manager popups that can edit, create and delete records """
-        self.set_table(table)
-        if record and record.parent_table == self.current_table:
-            self.set_record(record)
-        
 
     def set_db(self, db_path:str) -> None:
         """ For test purposes """
@@ -404,14 +339,72 @@ class DBManager2(PaddedGrid):
     
     def set_record(self, record:Record|str) -> None:
         """ For test purposes """
-        if type(record) is str:
-            record = self._db_handler.get_record(
-                table=self.current_table, display_name=record)
         self._records_table.set_selected(record)
-        self._on_records_selection_changed()  # TODO DEBUG this should not be necessary
 
     def tests(self):
         self.set_db("/home/anna/Documents/code/podfic_poster2/db/podfics.db")
         self.set_table("contribution")
         # self.set_record("No Archive Warnings Apply")
-        # print(self.current_record)
+
+
+
+class TableManager(PaddedGrid):
+
+    def __init__(
+            self, on_selection_changed:Callable=lambda: None,
+            init_table:Table=None, init_record:Record=None,
+            init_options:List[Record]=None):
+        super().__init__()
+
+        self._db_handler = SQLiteHandler()
+        self.current_table = init_table
+        self.current_record = init_record
+
+        def _on_records_selection_changed() -> None:
+            """ Callback for record selection """
+            self.current_record = self._records_table.current_selection
+            on_selection_changed()
+        self._on_records_selection_changed = _on_records_selection_changed
+
+        self._records_table = SingleSelectTable(self._on_records_selection_changed)
+        self._records_table.set_column_homogeneous(True)
+        if init_options: self.reload_table(init_options)
+        self.attach_next(self._records_table, width=5)
+
+        # Action buttons
+        modify_button = Button(label="Modify")
+        modify_button.connect("clicked", self._on_button_modify_clicked)
+        self.attach_next(modify_button, Gtk.PositionType.RIGHT)
+
+    def reload_table(self, records:List[Record]|None=None, table:Table=None) -> None:
+        """ Reload the records table """
+        # Define current table
+        if table: self.current_table = table
+        elif records: self.current_table = records[0].parent_table
+        # Fetch records if only table is given
+        if self.current_table and not records:
+            records = self._db_handler.get_records(
+                table=self.current_table, sort_by=None)
+        # Reset table records
+        self._records_table.reload_table(records)
+        self.current_record = None
+
+    def _on_button_modify_clicked(self, button:Button) -> None:
+        """ Callback for record edit button"""
+        popup = RecordManagerDialog(
+            self._on_record_modified,
+            self.current_table, self.current_record)
+
+    def _on_record_modified(self, table:Table, record:Record) -> None:
+        """ Callback for the record manager popups that can edit, create and delete records """
+        self.reload_table()
+        if record and record.parent_table == self.current_table:
+            self.set_record(record)
+
+    def set_record(self, record:Record|str) -> None:
+        """  """
+        if type(record) is str:
+            record = self._db_handler.get_record(
+                table=self.current_table, display_name=record)
+        self._records_table.set_selected(record)
+        self._on_records_selection_changed()  # TODO DEBUG this should not be necessary

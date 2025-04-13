@@ -7,30 +7,53 @@ from datetime import datetime
 
 from db.handler import DataHandler, SQLiteHandler
 from db.objects import Field, Record, Table, TextField, IntField, BoolField, DateField, FilepathField, LengthField, parse_datetime_format, parse_timedelta_format
-from gui.base_graphics import PaddedFrame, PaddedGrid
-from gui.confirm_dialog import ConfirmDialog, Dialog
+from gui.base_graphics import PaddedGrid, PlainGrid
+from gui.confirm_dialog import ConfirmDialog, Dialog, InfoDialog
 from gui.tables import SingleSelectTable
 
 
-class FormField(PaddedGrid):
+def find_row_of_record(to_find:Record, options:List[Record]) -> int|None:
+    row = None
+    for i, option in enumerate(options):
+        if option == to_find:
+            row = i
+    if row is None: print("DEBUG", f"couldn't find {to_find}. Options are: {options}")
+    return row
+
+def find_row_of_text(to_find:str, options:List[Record]) -> int|None:
+    row = None
+    for i, option in enumerate(options):
+        if option and option.display_name == to_find:
+            row = i
+    if row is None: print("DEBUG", f"couldn't find {to_find}. Options are: {options}")
+    return row
+
+
+
+class FormField(PlainGrid):
     """ A field in a form: label and widget
     Subclasses implement the different data types """
     def __init__(self, field:Field, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Field information is kept
         self.field = field
-        # Any setting that can be done at a higher class level: label, editability
-        # Mandatory fields are not technically mandatory for sqlite DBHandler, TODO see if we can do something about that
-        self._label = Label("*"+field.field_name) if field.mandatory else Label(field.field_name)
-        self._label.set_halign(Align.END)
-        # Any type-specific particularities are handled in the subclasses, including the choice of the widget
+        # Any type-specific particularities are handled in the subclasses,
+        # including the choice of the widget
         self._init_widget(*args, **kwargs)
         self._widget.set_halign(Align.START)
+        # Any setting that can be done at a higher class level: label, editability
+        # Mandatory fields are not technically mandatory for sqlite DBHandler,
+        # this should be crash tested and handled as an error raised from the DB
         # Editable or not
         self._widget.set_sensitive(field.editable)
         # Label to the left of the widget
-        self.attach_next(self._label)
-        self.attach_next(self._widget, position=PositionType.RIGHT)
+        self.attach_next(self._widget, width=1)
+        # DEBUG size
+        # using width=N only work if set_column_homogeneous(True) on the grid
+        # self._label.set_line_wrap(True)
+        # self._label.set_size_request(150,-1)
+        # self._widget.set_hexpand(True)
+        # self._label.set_size_request(20,20)
 
     def _init_widget(self, *args, **kwargs): raise NotImplementedError
     def set_value(self, value:Any): raise NotImplementedError
@@ -63,61 +86,63 @@ class ExtFormField(FormField):
     """ Any form field that is a reference to another table 
     Several implementations in subclasses """
 
-    def __init__(self, field:Field, options:List[Record], *args, **kwargs):
-        if len(options) > 0:
-            sort_by_field = options[0].parent_table.sort_rows_by
-            options.sort(key=lambda record: record.values[sort_by_field], reverse=False)
-        self._options = options
-        if not field.mandatory:
-            self._options = [None]+self._options
+    def __init__(self, field:Field, table:Table, *args, **kwargs):
+        self._db_handler = SQLiteHandler()
+        self.current_table = table
+        self.current_record = None
         super().__init__(field, *args, **kwargs)
 
-    def _find_row_of_record(self, to_find:Record) -> int|None:
-        row = None
-        for i, option in enumerate(self._options):
-            if option == to_find:
-                row = i
-        if row is None: print("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
-        return row
-    
-    def _find_row_of_text(self, to_find:str) -> int|None:
-        row = None
-        if to_find == "": return 0
-        for i, option in enumerate(self._options):
-            if option and option.display_name == to_find:
-                row = i
-        if row is None: print("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
-        return row
-    
-    def _find_row_of_ID(self, to_find:int) -> Record|None:
-        row = None
-        for i, option in enumerate(self._options):
-            if option.ID == to_find:
-                row = i
-        if row is None: print("DEBUG", f"{to_find} is not an option for this field. Options are: {self._options}")
-        return row
-    
+        # Action buttons
+        modify_button = Button(label="+")
+        modify_button.connect("clicked", self._on_button_modify_clicked)
+        self.attach_next(modify_button, PositionType.RIGHT)
 
-class NAExtFormField(UneditableFormField, ExtFormField):
-    """ An external form field with no options available """
-    def __init__(self, field, options, *args, **kwargs):
-        ExtFormField.__init__(self, field, options, *args, **kwargs)
-        UneditableFormField.__init__(self, field, *args, **kwargs)
-    def _init_widget(self):
-        UneditableFormField._init_widget(self)
-        UneditableFormField.set_value(self, None, "No options available")
-    def set_value(self, value = None): pass
-    def get_value(self) -> None: return None
+    def _init_widget(self) -> None:
+        self._options = self._db_handler.get_records(table=self.field.foreign_key_table)
+        sort_by_field = self.field.foreign_key_table.sort_rows_by
+        self._options.sort(key=lambda record: record.values[sort_by_field], reverse=False)
+        if not self.field.mandatory:
+            self._options = [None]+self._options
+
+        if not self._options: self._widget = NAExtWidget()
+        elif len(self._options) < 5: self._widget = RadioExtWidget(self._options)
+        elif len(self._options) < 10: self._widget = DropdownExtWidget(self._options)
+        else: self._widget = TableExtWidget(self._options)
+
+        if self.current_record: self._widget.set_value(self.current_record)
+
+    def _on_button_modify_clicked(self, button:Button) -> None:
+        """ Callback for record edit button"""
+        popup = RecordManagerDialog(
+            self._on_record_modified,
+            self.current_table, self.current_record)
+
+    def _on_record_modified(self, table:Table, record:Record) -> None:
+        """ Callback for the record manager popups that can edit, create and delete records """
+        self._init_widget()
+        if record:
+            self.set_value(record)
+
+    def clear_value(self) -> None:
+        self._widget.clear_value()
+
+
+class NAExtWidget(Label):
+    """ An external form field widget with no options available """
+    def __init__(self):
+        super().__init__()
+        self.set_label("No options available")
+    def set_value(self) -> None: pass
+    def get_value(self) -> Record|None: return None
     def clear_value(self) -> None: pass
 
-
-class RadioExtFormField(ExtFormField):
-    """ An external form field with radio button options """
-    def _init_widget(self):
-        # https://stackoverflow.com/questions/391237/pygtk-radio-button
+class RadioExtWidget(PlainGrid):
+    """ An external form field widget with radio button options
+    https://stackoverflow.com/questions/391237/pygtk-radio-button """
+    def __init__(self, options:List[Record]):
+        super().__init__()
+        self._options = options
         if len(self._options) == 0: return
-        self._widget = PaddedGrid()
-
         # If the field is not mandatory, none should be an option
         # If there is no default option, it will be the default
         # If there is no default option, no specific button should be selected
@@ -131,16 +156,15 @@ class RadioExtFormField(ExtFormField):
             none_button.hide()
             none_button.set_no_show_all(True)
             self._options = [None]+self._options
-        self._widget.attach_next(none_button)
+        self.attach_next(none_button)
 
         for option in self._options[1:]:
             _ = RadioButton.new_with_label_from_widget(none_button, option.display_name)
-            self._widget.attach_next(_)
+            self.attach_next(_)
         self._buttons = list(reversed(none_button.get_group()))
-        self.set_default()
 
     def set_value(self, value:Record):
-        row = self._find_row_of_record(value)
+        row = find_row_of_record(value, self._options)
         if row: self._buttons[row].set_active(True)
 
     def get_value(self) -> Record|None:
@@ -151,36 +175,39 @@ class RadioExtFormField(ExtFormField):
     def clear_value(self) -> None:
         self._buttons[0].set_active(True)
 
-class DropdownExtFormField(ExtFormField):
-    """ An external form field with a dropdown menu """
-    def _init_widget(self):
-        self._widget = ComboBoxText()
+class DropdownExtWidget(ComboBoxText):
+    """ An external form field widget with a dropdown menu """
+    def __init__(self, options:List[Record]):
+        super().__init__()
+        self._options = options
         for i, option in enumerate(self._options):
-            self._widget.insert(i, str(i),
+            self.insert(i, str(i),
                 option.display_name if type(option) is Record else "")
-        self.set_default()
+        # DEBUG size this one is variable and changes the size of the scrollwindows
     def set_value(self, value:Record):
-        row = self._find_row_of_record(value)
-        self._widget.set_active(row)
+        row = find_row_of_record(value, self._options)
+        self.set_active(row)
     def get_value(self) -> Record|None:
-        text = self._widget.get_active_text()
-        if not text: return None
-        row = self._find_row_of_text(text)
-        return self._options[row]
+        text = self.get_active_text()
+        row = find_row_of_text(text, self._options)
+        if row: return self._options[row]
     def clear_value(self) -> None:
-        self._widget.set_active(0)
+        self.set_active(0)
 
-class TableExtFormField(ExtFormField):
-    """ A table form field with single selection """
-    def _init_widget(self, options:List[Record], *args, **kwargs):
-        super()._init_widget(options, *args, **kwargs)
-        self._widget = None  # SingleSelectTable(label="", selection_mode="single", on_selection_changed=self._on_selection_changed)
-        self._current_record = None
-        self._widget.reload_table(options)
-    def _on_selection_changed(self): pass
-    def set_value(self, value:Record): raise NotImplementedError
-    def get_value(self) -> Record: raise NotImplementedError
-    def clear_value(self) -> None: raise NotImplementedError
+class TableExtWidget(SingleSelectTable):
+    """ A table form field widget with single selection and a button to edit records """
+    def __init__(self, options:List[Record]):
+        def _on_records_selection_changed() -> None:
+            """ Callback for record selection """
+            self.current_record = self._records_table.current_selection
+        super().__init__(_on_records_selection_changed)
+        self.reload_table(options)
+    def set_value(self, value:Record) -> None:
+        self.set_selected(value)
+    def get_value(self) -> Record:
+        return self.current_selection
+    def clear_value(self) -> None:
+        self.set_selected(None)
 
 
 class TextFormField(FormField):
@@ -190,6 +217,7 @@ class TextFormField(FormField):
         if self.field.default_value:
             self.set_value(self.field.default_value)
         # widget.set_visibility = True  # for passwords and such
+        self._widget.set_width_chars(50)  # DEBUG size is that enough?
     def set_value(self, value:str):
         self._widget.set_text(str(value))
     def get_value(self) -> str:
@@ -241,7 +269,7 @@ class FilepathFormField(FormField):
     """ FILEPATH form field """
     def _init_widget(self):
         self._widget = FileChooserButton()
-        self._widget.set_width_chars(50)
+        self._widget.set_width_chars(50)  #DEBUG size
         # self._widget.set_current_folder('./db')
         def on_file_picked(file_chooser_button):
               pass  # self.value = file_chooser_button.get_filename()
@@ -267,7 +295,7 @@ py_type_to_form_mapping = {
 }
 
 
-class RecordForm(PaddedGrid):
+class RecordFormGrid(PaddedGrid):
     """ All fields of a record, existing or to-be
     Code interface:
     - last_table
@@ -277,29 +305,28 @@ class RecordForm(PaddedGrid):
     - reset_form_from_table
     - reset_form_from_nothing """
 
-    def __init__(self, db_handler:SQLiteHandler):  # TODO specify fields? and field order
+    def __init__(self, init_table:Table=None, init_record:Record=None,):
         super().__init__()
+        self.set_vexpand(False)
 
         # Current info and helpers
-        self.last_record = None
-        self.last_table = None
+        self.last_record = init_record
+        self.last_table = init_table
         self._form_fields = []
-        self._db_handler = db_handler
+        self._db_handler = SQLiteHandler()
 
-        # Form fields and the corresponding grid will be filled by reset_form_from_record or reset_form_from_table
-        self._form_fields_grid = PaddedGrid()
-        self.attach_next(self._form_fields_grid)
+        # Init if possible
+        if init_record: self.reset_form_from_record(init_record)
+        else: self.reset_form_from_table(init_table)
     
-    def _get_form_field(self, field:Field) -> FormField:
-        """ Return an empty form_field from the right type """
+    def _get_form_field_and_label(self, field:Field) -> Tuple[Label,FormField]:
+        """ Return an empty form_field from the right type and its label """
+        label = Label("*"+field.field_name) if field.mandatory else \
+            Label(field.field_name)
+        label.set_halign(Align.END)
         if field.foreign_key_table:
-            options = self._db_handler.get_records(table=field.foreign_key_table)
-            if len(options) == 0: return NAExtFormField(field, options)
-            if len(options) < 5: return RadioExtFormField(field, options)
-            if len(options) < 10: return DropdownExtFormField(field, options)
-            return DropdownExtFormField(field, options)
-            # return TableExtFormField(field, options)
-        return py_type_to_form_mapping[type(field)](field)
+            return label, ExtFormField(field, table=field.foreign_key_table)
+        return label, py_type_to_form_mapping[type(field)](field)
 
     def reset_form_from_record(self, record:Record):
         """ Recreate all form fields and fill them with record values """
@@ -308,8 +335,9 @@ class RecordForm(PaddedGrid):
         self.last_table = record.parent_table
 
         for field in record.parent_table.fields:
-            form_field = self._get_form_field(field)
-            self._form_fields_grid.attach_next(form_field)
+            label, form_field = self._get_form_field_and_label(field)
+            self.attach_next(label)
+            self.attach_next(form_field, position=PositionType.RIGHT)
             self._form_fields.append(form_field)
 
         for form_field in self._form_fields:
@@ -330,8 +358,10 @@ class RecordForm(PaddedGrid):
         self.last_table = table
 
         for field in table.fields:
-            form_field = self._get_form_field(field)
-            self._form_fields_grid.attach_next(form_field)
+            label, form_field = self._get_form_field_and_label(field)
+            self.attach_next(label)
+            self.attach_next(form_field, position=PositionType.RIGHT)
+            self.last_added = label
             self._form_fields.append(form_field)
 
         for form_field in self._form_fields:
@@ -342,9 +372,9 @@ class RecordForm(PaddedGrid):
     def reset_form_from_nothing(self):
         """ Remove form """
         for form_field in self._form_fields:
-            self._form_fields_grid.remove(form_field)
+            self.remove(form_field)
         self._form_fields = []
-        self._form_fields_grid.last_added = None
+        self.last_added = None
         self.last_record = None
         self.last_table = None
         self.show_all()
@@ -353,142 +383,100 @@ class RecordForm(PaddedGrid):
         return {form_field.field:form_field.get_value() for form_field in self._form_fields}
 
 
-class RecordManagerGrid(PaddedGrid):
-    """ Form + save + cancel + delete, in a grid
-    For directly in a main window """
-    def __init__(self, on_change_notify:Callable):  # TODO specify fields? and field order
-        super().__init__()
-
-        # Current info and helpers
-        self._db_handler = SQLiteHandler()
-        self._on_change_notify = on_change_notify
-        self.form = RecordForm(self._db_handler)
-        self.attach_next(self.form)
-
-        # Action buttons
-        save_button = Button(label="Save")
-        save_button.connect("clicked", self._on_button_save_clicked)
-        cancel_button = Button(label="Cancel")
-        cancel_button.connect("clicked", self._on_button_cancel_clicked)
-        delete_button = Button(label="Delete")
-        delete_button.connect("clicked", self._on_button_delete_clicked)
-
-        # TODO button grid
-        self.form.attach_next(save_button)
-        self.form.attach_next(cancel_button, PositionType.RIGHT)
-        self.form.attach_next(delete_button, PositionType.RIGHT)
-        # Action buttons
-        # self.attach_next(
-        #     action_buttons_grid, PositionType.BOTTOM, 3, 1)
-
-    def _on_button_save_clicked(self, button:Button):
-        # Fetch and validate values
-        values = self.form.get_current_values()
-        if not self.form.last_record:
-            self.form.last_record = Record(self.form.last_table, values)
-            self.form.last_record.save_to_db(new=True)
-            self.form.reset_form_from_record(self.form.last_record)
-        else:
-            for field in values:
-                self.form.last_record.values[field] = values[field]
-            self.form.last_record.save_to_db(new=False)
-            self.form.last_record.recalculate_display_name()
-            self.form.reset_form_from_record(self.form.last_record)
-        self._on_change_notify()
-
-    def _on_button_cancel_clicked(self, button:Button):
-        if self.form.last_record: self.form.reset_form_from_record(self.form.last_record)
-        elif self.form.last_table: self.form.reset_form_from_table(self.form.last_table)
-        else: self.form.reset_form_from_nothing()
-
-    def _on_button_delete_clicked(self, button:Button):
-        if self.form.last_record:
-            popup = ConfirmDialog(self, freeze_app=True)
-            response = popup.run()
-            if response == Dialog.OK:
-                self._db_handler.delete_record_or_fail(self.form.last_record)
-                self.form.last_record = None
-                self.form.reset_form_from_table(self.form.last_table)
-                self._on_change_notify()
-            elif response == Dialog.CANCEL:
-                pass
-            popup.destroy()
-            
-
-
-class RecordManagerDialog(Dialog):
-    """ Form + save + cancel + delete, in a popup
-    # TODO define user interface: what popups do we want, with what buttons, when? """
-    def __init__(self,
+class RecordManagerGrid(RecordFormGrid):
+    """ Form + actions on form, in a grid
+    If there is a current record:
+    - Save button saves modifications to current record
+    - Cancel button removes modifications to current record 
+    - Delete button deletes the record after confirmation via popup
+    If there is not:
+    - Save button creates a new record
+    - Cancel button resets fields to default values/empty
+    - Delete button does nothing after info popup
+    #TODO to test """
+    def __init__(self, 
             on_change_notify:Callable,
-            db_handler:SQLiteHandler, table:Table, record:Record=None,
-            self_destruct_after_call:bool=True,):
-        super().__init__(title="Edit record", freeze_app=False)
-        # self.set_default_size(150, 100)
-
-        self._db_handler = db_handler
+            init_table:Table=None, init_record:Record=None,
+            delete_button:bool=True,
+        ):
+        super().__init__(init_table, init_record)
 
         def _on_change_notify() -> Tuple[Table, Record]:
             """ Wrapper to add table and record to callable"""
-            on_change_notify(self.form.last_table, self.form.last_record)
-            if self_destruct_after_call:
-                self.destroy()
+            on_change_notify(self.last_table, self.last_record)
         self._on_change_notify = _on_change_notify
-        
-        self.form = RecordForm(db_handler)
-        self._box.add(self.form)
-
-        if record: self.form.reset_form_from_record(record)
-        else: self.form.reset_form_from_table(table)
 
         # Action buttons
         save_button = Button(label="Save")
         save_button.connect("clicked", self._on_button_save_clicked)
         cancel_button = Button(label="Cancel")
         cancel_button.connect("clicked", self._on_button_cancel_clicked)
-        delete_button = Button(label="Delete")
-        delete_button.connect("clicked", self._on_button_delete_clicked)
+        if delete_button:
+            delete_button = Button(label="Delete")
+            delete_button.connect("clicked", self._on_button_delete_clicked)
 
-        # TODO button grid
-        self.form.attach_next(save_button)
-        self.form.attach_next(cancel_button, PositionType.RIGHT)
-        self.form.attach_next(delete_button, PositionType.RIGHT)
-        # Action buttons
-        # self.attach_next(
-        #     action_buttons_grid, PositionType.BOTTOM, 3, 1)
-
-        self.show_all()
+        button_grid = PaddedGrid()
+        button_grid.attach_next(save_button)
+        button_grid.attach_next(cancel_button, PositionType.RIGHT)
+        if delete_button: button_grid.attach_next(delete_button, PositionType.RIGHT)
+        self.attach_next(button_grid)
 
     def _on_button_save_clicked(self, button:Button):
         # Fetch and validate values
-        values = self.form.get_current_values()
-        if not self.form.last_record:
-            self.form.last_record = Record(self.form.last_table, values)
-            self.form.last_record.save_to_db(new=True)
-            self.form.reset_form_from_record(self.form.last_record)
+        values = self.get_current_values()
+        if not self.last_record:
+            self.last_record = Record(self.last_table, values)
+            self.last_record.save_to_db(new=True)
+            self.last_record = self._db_handler.get_record(
+                self.last_record.parent_table, self.last_record.display_name)
+            self.reset_form_from_record(self.last_record)
         else:
             for field in values:
-                self.form.last_record.values[field] = values[field]
-            self.form.last_record.save_to_db(new=False)
-            self.form.last_record.recalculate_display_name()
-            self.form.reset_form_from_record(self.form.last_record)
+                self.last_record.values[field] = values[field]
+            self.last_record.save_to_db(new=False)
+            self.last_record.recalculate_display_name()
+            self.reset_form_from_record(self.last_record)
         self._on_change_notify()
 
     def _on_button_cancel_clicked(self, button:Button):
-        if self.form.last_record: self.form.reset_form_from_record(self.form.last_record)
-        elif self.form.last_table: self.form.reset_form_from_table(self.form.last_table)
-        else: self.form.reset_form_from_nothing()
+        if self.last_record: self.reset_form_from_record(self.last_record)
+        elif self.last_table: self.reset_form_from_table(self.last_table)
+        else: self.reset_form_from_nothing()
 
     def _on_button_delete_clicked(self, button:Button):
-        if self.form.last_record:
+        if self.last_record:
             popup = ConfirmDialog(self, freeze_app=True)
             response = popup.run()
             if response == Dialog.OK:
-                self._db_handler.delete_record_or_fail(self.form.last_record)
-                self.form.last_record = None
-                self.form.reset_form_from_table(self.form.last_table)
+                self._db_handler.delete_record_or_fail(self.last_record)
+                self.last_record = None
+                self.reset_form_from_table(self.last_table)
                 self._on_change_notify()
             elif response == Dialog.CANCEL:
                 pass
             popup.destroy()
+        else:
+            popup = InfoDialog("???", "No record to delete", freeze_app=False)
+            # response = popup.run()
+            # popup.destroy()
             
+
+class RecordManagerDialog(Dialog):
+    """ The RecordManagerGrid but in a popup """
+    def __init__(self,
+            on_change_notify:Callable,
+            table:Table, record:Record=None,
+            delete_button:bool=True,
+            self_destruct_after_call:bool=True):
+        super().__init__(title=f"Edit {table.table_name} record", freeze_app=False)
+
+        def _on_change_notify():
+            if self_destruct_after_call:
+                self.destroy()
+            on_change_notify()
+
+        record_manager = RecordManagerGrid(_on_change_notify, table, record, delete_button)
+
+        self._box.add(record_manager)
+        self.set_size_request(600,500)  #DEBUG size this one works but at what cost
+        self.show_all()

@@ -18,7 +18,7 @@ class StartWindow(ApplicationWindow):
         super().__init__(application=application, title="WIP Podfic Poster")
 
         # Only affects the overall window, as if the user had resized it
-        self.set_default_size(800,750)
+        self.set_default_size(800,750)  #DEBUG size
 
         # TODO for now, the only DBHandler is in the db_management_widget level
         # this allows for easily switching DB files, but we're going to need db functionalities in other modules too

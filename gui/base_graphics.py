@@ -14,18 +14,18 @@ class PaddedFrame(Frame):
         self.grid = PaddedGrid()
         self.add(self.grid)
 
-
-class PaddedGrid(Grid, BaseObject):  # TODO cannot add verbose mode...
+class PlainGrid(Grid, BaseObject):  # TODO cannot add verbose mode...
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._verbose = True  #DEBUG need to check why I need to declare it here...
         self.set_row_spacing(5)
         self.set_column_spacing(5)
-        self.set_border_width(5)
-        self.set_column_homogeneous(True)
+        self.set_column_homogeneous(False)
         self.set_row_homogeneous(False)
+        # Required for scroll windows to go to the edges of the window
+        # instead of just min size of scroll and/or max height of contents
         self.set_hexpand(True)
-        self.set_vexpand(False)
+        self.set_vexpand(True)
         self.last_added = None
 
     def attach_next(
@@ -47,14 +47,24 @@ class PaddedGrid(Grid, BaseObject):  # TODO cannot add verbose mode...
         self.last_added = widget
 
 
+class PaddedGrid(PlainGrid):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.set_border_width(5)
+
+
 class ScrollWindow(ScrolledWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # DEBUG size
+        # min content is the only way so far to set up the size of a scroll window
         self.set_min_content_height(150)
-        self.set_max_content_height(300)
-        self.set_max_content_width(300)
+        # self.set_max_content_height(500)
+        self.set_min_content_width(300)
+        # self.set_max_content_width(500)
         # Make widget expand if window size gets bigger
-        self.set_vexpand(True)
-        self.set_hexpand(True)
-        self.set_propagate_natural_width(False)
+        # self.set_vexpand(True)
+        # self.set_hexpand(True)
+        # Attempt to tell parents to fit the size of the children
+        # self.set_propagate_natural_width(True)
         self.set_propagate_natural_height(True)
