@@ -35,21 +35,21 @@
         [x] ext no options
         [x] ext radio buttons
         [x] ext dropdown
-        [ ] ext table
-        [ ] ext add new record to foreign table
-            [ ] popup?
-            [ ] default value on one side of the rel
+        [x] ext table
+        [x] ext popup to create/modify/delete
+        [x] ext switch between widget types
+    [ ] table search
     [x] create record
-        [ ] autoselect the newly created record
+        [x] autoselect the newly created record
     [x] modify record
         [x] keep modified record selected
     [x] delete record
         [x] sql handler functions
-        [ ] if record selected, confirmation popup
-        [ ] if no record selected, reset to default values
-    [ ] cancel
+        [x] if record selected, confirmation popup
+        [x] if no record selected, info popup and no action
+    [x] cancel
         [x] if record selected, reset to current record
-        [ ] if no record selected, reset to default values
+        [x] if no record selected, reset to default values
     [ ] fix horizontal stretch when showing record form
 
 [ ] Projects Handler
@@ -80,7 +80,6 @@
 
 ## Basics
 
-[ ] popups?
 [ ] Gtk app??? how to automate tests pls
 [ ] separate GUI and workflow? -> turn GUI bricks into a python library/separate project
 [ ] turn db handler into another library? or already separate enough?

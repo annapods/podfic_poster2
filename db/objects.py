@@ -122,8 +122,11 @@ class TextField(Field):
 
 class BoolField(Field):
     def validate(self, value:Any) -> bool:
-        if (type(value)) is not bool: return False
-        return True
+        """ For now, accepting both strings and booleans, TODO ?? """
+        # if value == "True": return True
+        # if value == "False": return True
+        if (type(value)) is bool: return True
+        return False
 
 class DateField(Field):
     def validate(self, value:Any) -> bool:
@@ -243,11 +246,14 @@ class Record(BaseDataObject):
         return hash((hash(type(self).__name__), self.ID, hash(self.display_name)))
     
     def __eq__(self, other):
-        if not type(other) is type(self): return False
-        if not self.parent_table == other.parent_table: return False
-        if not len(self.values) == len(other.values): return False
+        if not type(other) is type(self):
+            return False
+        if not self.parent_table == other.parent_table:
+            return False
+        if not len(self.values) == len(other.values):
+            return False
         for f in self.parent_table.fields:
-            if self.values[f] != other.values[f]:
+            if self.values[f] != other.values[f] and self.values[f]:
                 return False
         return True
 

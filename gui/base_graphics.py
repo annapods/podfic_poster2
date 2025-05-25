@@ -38,12 +38,16 @@ class PlainGrid(Grid, BaseObject):  # TODO cannot add verbose mode...
             self.attach_next_to(widget, self.last_added, position, width, height)
             self.last_added = widget
     
-    def attach(self, widget:Widget, *args, **kwargs) -> None:
-        super().attach(widget, *args, **kwargs)
+    def attach(
+            self, widget:Widget, left:int=1, top:int=1,
+            width:int=1, height:int=1) -> None:
+        Grid.attach(self, widget, left, top, width, height)
         self.last_added = widget
     
-    def attach_next_to(self, widget:Widget, *args, **kwargs) -> None:
-        super().attach_next_to(widget, *args, **kwargs)
+    def attach_next_to(
+            self, widget:Widget, next_to:Widget, position=PositionType.BOTTOM,
+            width:int=1, height:int=1) -> None:
+        Grid.attach_next_to(self, widget, next_to, position, width, height)
         self.last_added = widget
 
 

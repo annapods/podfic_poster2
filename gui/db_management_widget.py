@@ -6,7 +6,7 @@ from gi.overrides.Gtk import Button
 from db.handler import SQLiteHandler
 from db.objects import Record, Table
 from gui.confirm_dialog import Dialog
-from gui.forms import RecordManagerDialog, RecordManagerGrid
+from gui.forms.record_managers import RecordManagerDialog, RecordManagerGrid
 from gui.base_graphics import PaddedFrame, PaddedGrid, ScrollWindow
 from gui.tables import MultiSelectTable, SingleSelectTable, TableWidget
 
@@ -95,7 +95,7 @@ class DBManager(PaddedGrid):
         """ Reload the tables table, reload in cascade the elements that depend on that table
         This table shows the data_table records """
         records = self._db_handler.get_records(table="data_table")
-        self._tables_table.reload_table(records)
+        self._tables_table.load_options(records)
         self.current_fields = None
         self._reload_fields_table()
         self._reload_records_table()
@@ -107,7 +107,7 @@ class DBManager(PaddedGrid):
             table="data_field",
             where_condition=f'''table_name="{self.current_table.table_name}"''' if self.current_table else ""
         )
-        self._fields_table.reload_table(records)
+        self._fields_table.load_options(records)
 
     def _reload_records_table(self) -> None:
         """ Reload the records table, reload in cascade the elements that depend on that table
@@ -120,7 +120,7 @@ class DBManager(PaddedGrid):
             )
         else:
             records = []
-        self._records_table.reload_table(records)
+        self._records_table.load_options(records)
         self.current_record = None
         self._reload_record_form()
 
@@ -279,7 +279,7 @@ class DBManager2(PaddedGrid):
         """ Reload the tables table, reload in cascade the elements that depend on that table
         This table shows the data_table records """
         records = self._db_handler.get_records(table="data_table")
-        self._tables_table.reload_table(records)
+        self._tables_table.load_options(records)
         self._reload_fields_table()
         self._reload_records_table()
     
@@ -290,14 +290,14 @@ class DBManager2(PaddedGrid):
             table="data_field",
             where_condition=f'''table_name="{self.current_table.table_name}"''' if self.current_table else ""
         )
-        self._fields_table.reload_table(records)
+        self._fields_table.load_options(records)
 
     def _reload_records_table(self) -> None:
         """ Reload the records table
         This table shows the records of the selected table, if any
         If no table has been selected, or if the table is empty, nothing will be shown,
         not even column headers """
-        self._records_table.reload_table(table=self.current_table)
+        self._records_table.load_options(table=self.current_table)
 
     def _on_file_picked(self, file_chooser_button):
         """ Callback for database file selection """
@@ -368,7 +368,7 @@ class TableManager(PaddedGrid):
 
         self._records_table = SingleSelectTable(self._on_records_selection_changed)
         self._records_table.set_column_homogeneous(True)
-        if init_options: self.reload_table(init_options)
+        if init_options: self.load_options(init_options)
         self.attach_next(self._records_table, width=5)
 
         # Action buttons
@@ -376,7 +376,7 @@ class TableManager(PaddedGrid):
         modify_button.connect("clicked", self._on_button_modify_clicked)
         self.attach_next(modify_button, Gtk.PositionType.RIGHT)
 
-    def reload_table(self, records:List[Record]|None=None, table:Table=None) -> None:
+    def load_options(self, records:List[Record]|None=None, table:Table=None) -> None:
         """ Reload the records table """
         # Define current table
         if table: self.current_table = table
@@ -386,18 +386,19 @@ class TableManager(PaddedGrid):
             records = self._db_handler.get_records(
                 table=self.current_table, sort_by=None)
         # Reset table records
-        self._records_table.reload_table(records)
+        self._records_table.load_options(records)
         self.current_record = None
 
     def _on_button_modify_clicked(self, button:Button) -> None:
         """ Callback for record edit button"""
         popup = RecordManagerDialog(
-            self._on_record_modified,
-            self.current_table, self.current_record)
+            table=self.current_table,
+            record=self.current_record,
+            on_change_notify=self._on_record_modified)
 
-    def _on_record_modified(self, table:Table, record:Record) -> None:
+    def _on_record_modified(self, record:Record) -> None:
         """ Callback for the record manager popups that can edit, create and delete records """
-        self.reload_table()
+        self.load_options()
         if record and record.parent_table == self.current_table:
             self.set_record(record)
 

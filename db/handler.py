@@ -89,7 +89,6 @@ class SQLiteHandler(DataHandler):
         TextField: "TEXT", IntField: "INTEGER",
         BoolField: "BOOLEAN", DateField: "TEXT",
         FilepathField: "TEXT", LengthField: "TEXT" 
-
     }
 
     def __init__(
@@ -185,7 +184,6 @@ class SQLiteHandler(DataHandler):
             FROM tables CROSS JOIN pragma_table_info(tables.tableName) fields""", []).fetchall()
         #TODO
         pass
-
     
     def load_db_from_spreadsheet(
             self, spreadsheet_path:str="db/database.ods",
@@ -220,7 +218,6 @@ class SQLiteHandler(DataHandler):
                 else: raise ArgumentError(None, message=
                     "mode must be one of: add or fail, update or add, delete and add, add or ignore")
 
-    
     def export_db_to_spreadsheet(
             self, table_names:Optional[List[str]]=[], spreadsheet_path:str="db/database_out.ods",
             exclude_parameters:Optional[bool]=True
@@ -255,6 +252,22 @@ class SQLiteHandler(DataHandler):
                 data[tab].to_excel(writer, sheet_name=tab, index=False)
 
     
+    def _parse_raw_data_into_record(self, data:List[List[Any]], table:Table) -> Record:
+        """ Parse the results of a query fetchall into records"""
+        records = []
+        for list_value in data:
+            # SQLite does not actually support boolean type and saves it as text (in this case)
+            # For more info, see https://github.com/HaxeFoundation/hxcpp/issues/241
+            # Or https://stackoverflow.com/questions/4824687/how-to-include-a-boolean-in-an-sqlite-where-clause/16880803#16880803
+            # Made the choice to convert to actual booleans in the data handler, since it's supposed to
+            # be the interface between a DB that just happens to be SQLite, and the app data model
+            dict_values = {
+                field: eval(value) if type(field) is BoolField else value \
+                for field, value in zip(table.fields, list_value)
+            }
+            records.append(Record(table, dict_values))
+        return records
+
     def get_records(
             self, table:Table|str, sort_by:Optional[Record|str]=None,
             where_condition:Optional[str]=None) -> List[Record]:
@@ -268,27 +281,13 @@ class SQLiteHandler(DataHandler):
         elif table.sort_rows_by and not sort_by: sort_by = table.sort_rows_by.field_name
 
         # Build query
-        data_query = f'''SELECT *'''
-        data_query += f''' FROM {table.table_name}'''
+        data_query = f'''SELECT * FROM {table.table_name}'''
         if where_condition: data_query += f''' WHERE {where_condition}'''
         if sort_by: data_query += f''' ORDER BY {sort_by}'''
+        
         # Fetch data
         data = self._run_query(data_query, []).fetchall()
-        records = []
-        # records = [Record(table, {h:v for h, v in zip(table.fields, values)}) for values in data]
-        for list_value in data:
-            # SQLite does not actually support boolean type and saves it as text (in this case)
-            # For more info, see https://github.com/HaxeFoundation/hxcpp/issues/241
-            # Or https://stackoverflow.com/questions/4824687/how-to-include-a-boolean-in-an-sqlite-where-clause/16880803#16880803
-            # Made the choice to convert to actual booleans in the data handler, since it's supposed to
-            # be the interface between a DB that just happens to be SQLite, and my data model
-            dict_values = {
-                field: eval(value) if type(field) is BoolField else value \
-                for field, value in zip(table.fields, list_value)
-            }
-            records.append(Record(table, dict_values))
-
-        return records
+        return self._parse_raw_data_into_record(data, table)
     
     def get_record(self, table:Table|str, display_name:str) -> Record:
         """ Return record from database """
@@ -297,19 +296,18 @@ class SQLiteHandler(DataHandler):
             table = self.data_model.get_table(table)
         
         # Build query
-        data_query = f'''SELECT *'''
-        data_query += f''' FROM {table.table_name}'''
+        data_query = f'''SELECT * FROM {table.table_name}'''
         data_query += f''' WHERE {table.table_name}.display_name = "{display_name}";'''
+
         # Fetch data
         data = self._run_query(data_query, []).fetchall()
-        if not data:
+        try:
+            return self._parse_raw_data_into_record(data, table)[0]
+        except IndexError as e:
+            # Assumption is, there should be one record, and only one
+            # Case of several records is handled by the DB by a unique constraint on display_name
             self._vprint(f"couldn't find record for {display_name} in {table.table_name}")
-            raise Exception
-
-        # Get non-automatic fields
-        # headers = list(map(lambda attr : attr[0], self.cur.description))
-        record = Record(table, {h:v for h, v in zip(table.fields, data[0])})
-        return record
+            raise e
 
     
     def clear_table(self, table:Table) -> None:

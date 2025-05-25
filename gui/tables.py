@@ -22,7 +22,7 @@ class TableWidget(PaddedGrid):
     Selection is implemented at subclass level
     External interface:
     - self.current_selection, Record or list of Records
-    - self.reload_table(records:Optional[List[Record]])
+    - self.load_options(records:Optional[List[Record]])
     - self.set_selected(to_select:Record|int)
     Calls on_change_notify (init arg) when the selection changes """
 
@@ -109,7 +109,7 @@ class TableWidget(PaddedGrid):
         self._vprint("DEBUG", f"Record ID {to_find} cannot be found here.")
         return None
 
-    def reload_table(self, records:Optional[List[Record]]) -> None:
+    def load_options(self, records:Optional[List[Record]]) -> None:
         """ Reload the table with the given records
         Warning, might not display columns if there is no record and no set columns were specified for this table """
 
