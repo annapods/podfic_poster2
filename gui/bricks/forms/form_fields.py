@@ -5,7 +5,7 @@ from datetime import datetime
 
 from db.objects import Field, TextField, IntField, BoolField, DateField, \
     FilepathField, LengthField
-from gui.base_graphics import PlainGrid
+from gui.bricks.containers import PlainGrid
 
 
 class FormField(PlainGrid):

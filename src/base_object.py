@@ -1,9 +1,10 @@
 # pylint: disable=too-few-public-methods
 # -*- coding: utf-8 -*-
-""" Base verbose object """
+""" Base objects, pickleable/recordifiable and singletons """
 
 
 from typing import Optional
+from logging import getLogger
 
 
 class DebugError(Exception):
@@ -14,14 +15,15 @@ class DebugError(Exception):
 class BaseObject:
     """ Base class for every object """
 
-    def __init__(self, verbose:Optional[bool]=True):
-        self._verbose = verbose
-
-    def _vprint(self, string:str, end:str="\n") -> None:
-        """ Print if verbose """
-        if self._verbose:
-            print("DEBUG "+string, end=end)
+    logger = getLogger("global")
     
+    def log(self, *args, **kargs): return BaseObject.logger.log(*args, **kargs)
+    def debug(self, *args, **kargs): return BaseObject.logger.debug(*args, **kargs)
+    def info(self, *args, **kargs): return BaseObject.logger.info(*args, **kargs)
+    def warning(self, *args, **kargs): return BaseObject.logger.warning(*args, **kargs)
+    def error(self, *args, **kargs): return BaseObject.logger.error(*args, **kargs)
+    def critical(self, *args, **kargs): return BaseObject.logger.critical(*args, **kargs)
+
     def __getstate__(self):
         """ Overwritten to exclude private attributes in jsonpickle
         https://stackoverflow.com/questions/18147435/how-to-exclude-specific-fields-on-serialization-with-jsonpickle """
@@ -44,14 +46,14 @@ class BaseObject:
         raise NotImplementedError
 
     @classmethod
-    def from_record(record, verbose:Optional[bool]=True):
+    def from_record(record):
         """ Return an object of the current class, from the given record
         NOTE record is a Record object, and this returns a BaseObject object, crossreference got in the
         way of type hinting """
         raise NotImplementedError
 
 
-class Singleton(type): 
+class Singleton(type):
     # Inherit from "type" in order to gain access to method __call__
     def __init__(self, *args, **kwargs):
         self.__instance = None # Create a variable to store the object reference

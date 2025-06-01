@@ -19,13 +19,13 @@
 
 ## Graphic interface
 
-[ ] Database Manager
+[ ] Database Manager / bricks
     [x] pick database
     [x] pick table
         [x] column order
     [x] pick record
     [x] reload dynamically
-    [ ] show record
+    [x] show record
         [x] text
         [x] boolean
         [x] int
@@ -47,36 +47,66 @@
         [x] sql handler functions
         [x] if record selected, confirmation popup
         [x] if no record selected, info popup and no action
+        [ ] remove horizontal scroll on popup
     [x] cancel
         [x] if record selected, reset to current record
         [x] if no record selected, reset to default values
     [ ] fix horizontal stretch when showing record form
 
-[ ] Projects Handler
-    [ ] tables to select project and section
-        [ ] select one
-        [ ] aggregated status for whole project?
-        [ ] show project sections of selected project
-    [ ] button to create a new project
-        [ ] what info?
-        [ ] new window or below?
-    [ ] button to create a new section
-    [ ] form to edit project status by stage for selected project section
-    [ ] buttons for steps/actions -> new windows? or frames?
+[ ] Projects
+    [ ] KPIs?
+    [ ] project structures?
+    [ ] Project overview + select table?
+        [ ] projects
+        [ ] project sections?
+        [ ] stage+status
+        [ ] sum up stage+status?
+        [ ] edit selected?
+    [ ] Project sections overview + selection?
+        [ ] based on project selected
+        [ ] view+edit stage+status
+        [ ] edit selected?
+    [ ] Create new
+        [ ] new project
+            [ ] from folder?
+            [ ] from html?
+            [ ] from scratch?
+            [ ] save to db
+        [ ] new section
+            [ ] from folder?
+            [ ] from html?
+            [ ] from scratch?
+            [ ] save to db
+    [ ] actions
         [ ] setup
             [ ] download from ao3
-            [ ] extract info from html
+            [ ] extract info from html -> placeholders? approval before creation?
         [ ] post
-            [ ] automatic file discovery
+            [ ] project as a whole as a single chaptered work
+            [ ] project as a multichaptered work
+            [ ] section as a new chapter in a work
+            [ ] section as a new work (+occasions to tie it back?)
+            [ ] automatic file discovery and setup
+            [ ] gd setup
+            [ ] ia setup
+            [ ] aa setup?
+            [ ] ao3 draft
+            [ ] ia summary
         [ ] promo
-        [ ] archive
             [ ] bsky?
-            [ ] save a yaml file?
+            [ ] tumblr
+            [ ] mastodon??
+            [ ] dw
+        [ ] archive
+            [ ] backup audio??
+            [ ] gd metadata?
+            [ ] ia metadata?
 
 [ ] user settings
     [ ] secrets
-    [ ] database
+    [ ] database file
     [ ] me person?
+    [ ] log level
 
 ## Basics
 

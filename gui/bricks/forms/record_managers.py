@@ -4,10 +4,10 @@ from gi.repository.Gtk import Button, PositionType, Label, Button, PositionType,
 
 from db.handler import SQLiteHandler
 from db.objects import Field, Record, Table
-from gui.base_graphics import PaddedGrid
-from gui.confirm_dialog import ConfirmDialog, Dialog, InfoDialog
-from gui.forms.form_fields import FormField, get_form_field
-from gui.forms.ext_widgets import _select_ext_widget_type
+from gui.bricks.containers import PaddedGrid
+from gui.bricks.dialogs import ConfirmDialog, Dialog, InfoDialog
+from gui.bricks.forms.form_fields import FormField, get_form_field
+from gui.bricks.forms.ext_widgets import _select_ext_widget_type
 
 
 class ExtFormField(FormField):
@@ -36,6 +36,9 @@ class ExtFormField(FormField):
     
     def set_value(self, value:Record|None) -> None:
         self._widget.set_value(value)
+    
+    def get_value(self) -> Record|None:
+        return self._widget.get_value()
 
     def _get_options_from_db(self) -> List[Record|None]:
         """ Fetch and return all records in the DB table of the field """
@@ -43,68 +46,38 @@ class ExtFormField(FormField):
         options.sort(
             key=lambda record: record.values[self.table.sort_rows_by],
             reverse=False)
-        if not self.field.mandatory: options = [None]+options
         return options
 
     def _on_selection_modified(self) -> None:
         """ If selection changes, it needs to be traced/accessible """
-        self.last_record = self._widget.get_value()
+        if self._widget:  # At widget init, the selection will be initialized before the widget reference is saved
+            self.last_record = self._widget.get_value()
 
     def _init_widget(self) -> None:
         """ Initialize widget OR refresh to take into account for modification of DB records """
         # Get (new) list of options and type of widget
         self._options = self._get_options_from_db()
+        include_none = not self.field.mandatory
         new_type = _select_ext_widget_type(len(self._options))
         
-        if not self._widget: # Init of the form, cf super.__init__                                      
-            self._widget = new_type(self._options, self._on_selection_modified)
-        
-        elif type(self._widget) == new_type:  # Refresh but same widget type
-            self._widget.load_options(self._options)
+        # Resetting the widget will deselect and by doing so, update last_record
+        last_record = self.last_record
+
+        if not self._widget: # Init of the form, cf super.__init__                          
+            self._widget = new_type(self._options, include_none, self._on_selection_modified)
+        if type(self._widget) == new_type:  # Refresh but same widget type
+            self._widget.load_options(self._options, include_none)
         
         else:  # Refresh and new widget type
             self.remove(self._widget)
-            self._widget = new_type(self._options, self._on_selection_modified)
+            self._widget = new_type(self._options, include_none, self._on_selection_modified)
             self.attach(self._widget, 0, 0)
             self._format_widget()
             self._widget.show_all()
         
         # Depending on the case, select the previous selection, or the default value, or nothing
-        if self.last_record: self._widget.set_value(self.last_record)
+        if last_record: self._widget.set_value(last_record)
         else: self.set_default()
-
-        # TODO TESTS
-        # 0 NA
-        # ? -> create new -> switches to radio buttons
-        # 1 radio pre-selected
-        # ? -> can modify -> delete
-        # 0 NA
-        # + -> cancel -> no change
-        # + -> delete -> no change
-        # + -> create new -> switches to radio buttons
-        # 1 radio pre-selected
-        # + -> create new -> selected
-        # 2 radio pre-selected
-        # ? -> can modify -> delete -> no selection
-        # 1 radio no selection
-        # ? -> create new until there's 5 -> dropdown
-        # 5 dropdown pre-selected
-        # ? -> can modify -> delete -> back to radio buttons, no selection
-        # 4 radio no selection
-        # ? -> create new -> selected -> dropdown
-        # ? -> create new
-        # 6 dropdown pre-selected
-        # ? -> can modify -> delete -> no selection
-        # 5 dropdown no selection
-        # ? -> create new until there's 10 -> table
-        # 10 table pre-selected
-        # ? -> can modify -> delete -> back to dropdown, no selection
-        # 9 dropdown no selection
-        # ? -> create new x2 -> selected
-        # 11 table pre-selected
-        # ? -> can modify -> delete -> no selection
-        # 10 table no selection
-
 
     def _on_button_modify_clicked(self, _:Button) -> None:
         """ Open a record manager dialog for the record selected 
@@ -263,37 +236,40 @@ class RecordManagerGrid(RecordFormGrid):
     def _on_button_save_clicked(self, button:Button):
         # Fetch and validate values
         values = self.get_current_values()
-        if not self.last_record:
-            self.last_record = Record(self.last_table, values)
-            self.last_record.save_to_db(new=True)
-            self.last_record = self._db_handler.get_record(
-                self.last_record.parent_table, self.last_record.display_name)
-            self.reset_form_from_record(self.last_record)
-        else:
-            for field in values:
-                self.last_record.values[field] = values[field]
-            self.last_record.save_to_db(new=False)
-            self.last_record.recalculate_display_name()
-            self.reset_form_from_record(self.last_record)
-        self._on_change_notify()
+        try:
+            if not self.last_record:
+                self.last_record = Record(self.last_table, values)
+                self.last_record.save_to_db(new=True)
+                self.last_record = self._db_handler.get_record(
+                    self.last_record.parent_table, self.last_record.display_name)
+                self.reset_form_from_record(self.last_record)
+            else:
+                for field in values:
+                    self.last_record.values[field] = values[field]
+                self.last_record.save_to_db(new=False)
+                self.last_record.recalculate_display_name()
+                self.reset_form_from_record(self.last_record)
+            self._on_change_notify()
+        except ValueError as e:
+            self.error("Something went wrong while trying to save", exc_info=e)
 
-    def _on_button_cancel_clicked(self, button:Button):
+    def _on_button_cancel_clicked(self, _:Button):
         if self.last_record: self.reset_form_from_record(self.last_record)
         elif self.last_table: self.reset_form_from_table(self.last_table)
         else: self.reset_form_from_nothing()
         self._on_cancel_notify()
 
-    def _on_button_delete_clicked(self, button:Button):
+    def _on_button_delete_clicked(self, _:Button):
         if self.last_record:
-            popup = ConfirmDialog(self, freeze_app=True)
+            popup = ConfirmDialog(self.last_record.display_name, freeze_app=True)
             response = popup.run()
             if response == Dialog.OK:
                 self._db_handler.delete_record_or_fail(self.last_record)
                 self.last_record = None
                 self.reset_form_from_table(self.last_table)
                 self._on_change_notify()
-            elif response == Dialog.CANCEL:
-                pass
+            # elif response == Dialog.CANCEL:
+            #     pass
             popup.destroy()
         else:
             popup = InfoDialog("???", "No record to delete", freeze_app=False)
@@ -312,7 +288,7 @@ class RecordManagerDialog(Dialog):
         if record: title = f"Edit {record.parent_table.table_name} record"
         elif table: title = f"Create {table.table_name} record"
         else: title = "???"
-        super().__init__(title, freeze_app=False)
+        super().__init__(title, freeze_app=False, add_ok_button=False)
 
         def _on_change_notify() -> None:
             """ Wrapper to add table and record to callable"""

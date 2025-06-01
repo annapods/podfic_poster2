@@ -1,11 +1,6 @@
-import gi
-gi.require_version("Gtk", "3.0")
 from gi.repository.Gtk import Grid, Frame, Widget, PositionType, ScrolledWindow
 
-
 from src.base_object import BaseObject
-from db.objects import Field, Record
-# from gui.application import BaseApplication
 
 
 class PaddedFrame(Frame):
@@ -16,8 +11,8 @@ class PaddedFrame(Frame):
 
 class PlainGrid(Grid, BaseObject):  # TODO cannot add verbose mode...
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._verbose = True  #DEBUG need to check why I need to declare it here...
+        Grid.__init__(self, *args, **kwargs)
+        BaseObject.__init__(self)
         self.set_row_spacing(5)
         self.set_column_spacing(5)
         self.set_column_homogeneous(False)

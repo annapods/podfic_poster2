@@ -1,14 +1,10 @@
-import sys
-import gi
-gi.require_version("Gtk", "3.0")
 from gi.repository.Gtk import ApplicationWindow, Grid, Stack, StackSidebar, Label, Application
 
+from gui.bricks.containers import ScrollWindow
+from gui.workflows.db_manager import DBManager2
 
-from gui.base_graphics import ScrollWindow
-from gui.db_management_widget import DBManager, DBManager2
 
-
-class StartWindow(ApplicationWindow):
+class MainWindow(ApplicationWindow):
     """ Main window of the application, navigation level
     Contains a menu to the left that selects the content of the panel to the left
     https://stackoverflow.com/questions/44509994/create-a-simple-tabbed-multi-page-application-with-python-and-gtk """
@@ -88,11 +84,7 @@ class PodficApplication(Application):
         if not self.main_window:
             # Windows are associated with the application
             # when the last one is closed the application shuts down
-            self.main_window = StartWindow(application=self)
+            self.main_window = MainWindow(application=self)
 
         self.main_window.present()
 
-
-if __name__ == "__main__":
-    app = PodficApplication()
-    app.run(sys.argv)

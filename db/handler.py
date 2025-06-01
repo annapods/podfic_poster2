@@ -1,15 +1,13 @@
 """ Database handlers """
 
 from sqlite3 import OperationalError, connect
-from typing import Any, Dict, Literal, Optional, List, Tuple, Union
-from pandas import ExcelWriter, Series, ExcelFile, read_sql_query, DataFrame
-from numpy import nan
+from typing import Any, Literal, Optional, List
+from pandas import ExcelWriter, ExcelFile, read_sql_query
 from os import remove
 from os.path import exists
 
 
 from db.objects import DataModel, Field, Record, Table, clean_df, TextField, BoolField, IntField, FilepathField, LengthField, DateField
-from db.objects import spreadsheet_to_py_type_mapping, py_to_spreadsheet_type_mapping
 from src.base_object import BaseObject, Singleton
 
 
@@ -18,10 +16,10 @@ class DataHandler(BaseObject, metaclass=Singleton):
     Database handlers load in memory the model of the database, but they don't load the data itself
     They can however read, create, modify and delete the records in the database """
 
-    def __init__(self, database_path:Optional[str]="", datamodel_path:Optional[str]="db/datamodel.ods", verbose:bool=True):
+    def __init__(self, database_path:Optional[str]="", datamodel_path:Optional[str]="db/datamodel.ods"):
         if not hasattr(self, '__instance'):  # if it does, then a singleton has already been created
             # in that case, use change_db instead
-            super().__init__(verbose)
+            super().__init__()
             self.database_path = database_path
             self.data_model = DataModel(datamodel_path)
     
@@ -92,9 +90,8 @@ class SQLiteHandler(DataHandler):
     }
 
     def __init__(
-            self, database_path:str="db/podfics.db", datamodel_path:str="db/datamodel.ods",
-            verbose:bool=True):
-        super().__init__(database_path, datamodel_path, verbose)
+            self, database_path:str="db/podfics.db", datamodel_path:str="db/datamodel.ods"):
+        super().__init__(database_path, datamodel_path)
         self.con = connect(self.database_path)
         self.cur = self.con.cursor()
 
@@ -114,11 +111,9 @@ class SQLiteHandler(DataHandler):
 
     def _run_query(self, query:str, parameters:List[Any]) -> List[List[Any]]:
         """ Fetch results of the query """
-        try:
-            res = self.cur.execute(query, parameters)
-        except Exception as e:
-            self._vprint(f"query failed {query}")
-            raise e
+        res = None
+        try: res = self.cur.execute(query, parameters)
+        except Exception as e: self.debug(f"query failed: {query}", exc_info=e)
         self.con.commit()
         return res
     
@@ -129,12 +124,12 @@ class SQLiteHandler(DataHandler):
             FROM sqlite_master WHERE type = 'table' AND tableName NOT LIKE 'sqlite_%')
             SELECT fields.name, fields.type, tableName
             FROM tables CROSS JOIN pragma_table_info(tables.tableName) fields""", []).fetchall()
-        print("DB schema:", schema)
+        self.debug(f"DB schema: {schema}")
         try:
             table_contents = self._run_query(f"SELECT * FROM {debug_table};", []).fetchall()
-            self._vprint(debug_table+":", table_contents, "\n")
+            self.debug(f"debug_schema for {debug_table}: {table_contents}")
         except OperationalError as e:
-            self._vprint(debug_table+":", e)
+            self.debug(f"debug_schema for {debug_table}", exc_info=e)
 
     
     def init_db_from_model(self) -> None:
@@ -234,7 +229,7 @@ class SQLiteHandler(DataHandler):
                 tables = [table for table in self.data_model.tables if table.table_name != "parameter"]
             else:
                 tables = self.data_model.tables
-            self._vprint(f"Exporting tables: {tables}")
+            self.info(f"Exporting tables: {tables}")
         # Load DB data into dataframes
         data = {
             table.table_name: read_sql_query(f"SELECT * from {table.table_name}", self.con)
@@ -306,8 +301,7 @@ class SQLiteHandler(DataHandler):
         except IndexError as e:
             # Assumption is, there should be one record, and only one
             # Case of several records is handled by the DB by a unique constraint on display_name
-            self._vprint(f"couldn't find record for {display_name} in {table.table_name}")
-            raise e
+            self.error(f"couldn't find record for {display_name} in {table.table_name}", exc_info=e)
 
     
     def clear_table(self, table:Table) -> None:

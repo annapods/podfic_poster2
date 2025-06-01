@@ -1,14 +1,13 @@
-from typing import Any, Callable, List, Optional
+from typing import Callable, List
 from gi.repository import Gtk
 from gi.overrides.Gtk import Button
 
 
 from db.handler import SQLiteHandler
 from db.objects import Record, Table
-from gui.confirm_dialog import Dialog
-from gui.forms.record_managers import RecordManagerDialog, RecordManagerGrid
-from gui.base_graphics import PaddedFrame, PaddedGrid, ScrollWindow
-from gui.tables import MultiSelectTable, SingleSelectTable, TableWidget
+from gui.bricks.forms.record_managers import RecordManagerDialog, RecordManagerGrid
+from gui.bricks.containers import PaddedFrame, PaddedGrid
+from gui.bricks.tables import MultiSelectTable, SingleSelectTable, TableWidget
 
 
 class DBManager(PaddedGrid):
@@ -206,7 +205,7 @@ class DBManager(PaddedGrid):
         self.set_db("/home/anna/Documents/code/podfic_poster2/db/podfics.db")
         self.set_table("contribution")
         # self.set_record("No Archive Warnings Apply")
-        # print(self.current_record)
+        # self.info(f"{self.current_record}")
 
 
 
@@ -387,7 +386,7 @@ class TableManager(PaddedGrid):
                 table=self.current_table, sort_by=None)
         # Reset table records
         self._records_table.load_options(records)
-        self.current_record = None
+        # self._records_table.set_selected(self.current_record)
 
     def _on_button_modify_clicked(self, button:Button) -> None:
         """ Callback for record edit button"""

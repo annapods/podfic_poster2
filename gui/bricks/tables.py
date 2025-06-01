@@ -3,7 +3,7 @@ from gi.repository.Gtk import ListStore, TreeView, TreeSelection, PositionType, 
 
 
 from db.objects import Field, Record, Table, TextField, IntField, BoolField, DateField, FilepathField, LengthField
-from gui.base_graphics import PaddedFrame, PaddedGrid, ScrollWindow
+from gui.bricks.containers import PaddedFrame, PaddedGrid, ScrollWindow
 
 
 py_to_gtk_type_mapping = {
@@ -97,7 +97,7 @@ class TableWidget(PaddedGrid):
             for record in self._records:
                 if record.ID == to_find:
                     return record
-        self._vprint("DEBUG", f"Record ID {to_find} cannot be found here.")
+        self.debug(f"Record ID {to_find} cannot be found here.")
         return None
 
     def _find_row_number_by_ID(self, to_find) -> Record|None:
@@ -106,7 +106,7 @@ class TableWidget(PaddedGrid):
             for i, record in enumerate(self._records):
                 if record.ID == to_find:
                     return i
-        self._vprint("DEBUG", f"Record ID {to_find} cannot be found here.")
+        self.debug(f"Record ID {to_find} cannot be found here.")
         return None
 
     def load_options(self, records:Optional[List[Record]]) -> None:
@@ -129,8 +129,7 @@ class TableWidget(PaddedGrid):
                 try:
                     self._datastore.append([record.values[f] for f in self._fields])
                 except Exception as e:
-                    self._vprint(f"DEBUG couldn't add record to table widget...\nTable:{self._table}\nFields:{self._fields}\nRecord: {record}")
-                    raise e
+                    self.debug(f"Couldn't add record to table widget...\nTable:{self._table}\nFields:{self._fields}\nRecord: {record}", exc_info=e)
 
     def set_selected(self, to_select:Record|int|None) -> None:
         if to_select is None:
